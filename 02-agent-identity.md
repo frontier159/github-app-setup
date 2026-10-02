@@ -20,18 +20,21 @@ set `CLAUDECODE`, so nothing changes for you.
 - Steps in [01](01-github.md) are done: the App exists, is installed on
   each owner, and its private key is at `~/.config/agent-git/app.pem`
   with mode 600.
-- The credential helper is installed. It mints a one-hour installation
-  token from the private key. The installer copies it into place if it
-  is on your `PATH`, or uses it if it is already in
-  `~/.config/agent-git/bin`:
+- `jq` is available. It ships with macOS 15 and later as
+  `/usr/bin/jq`. On older macOS, `brew install jq`.
 
-  ```bash
-  go install github.com/bdellegrazie/git-credential-github-app@latest
-  ```
+## The credential helper
 
-  Or download the release for your platform from
-  [its releases page](https://github.com/bdellegrazie/git-credential-github-app/releases)
-  and put the binary on your `PATH`.
+[`files/git-credential-agent`](files/git-credential-agent) is the only
+code that reads the App's private key, so it lives in this repo and
+uses nothing third-party. It signs a nine-minute JWT with the key using
+`/usr/bin/openssl`, and posts it to GitHub with `/usr/bin/curl` in
+exchange for a one-hour installation token. It reads GitHub's reply with
+`jq`, preferring the copy in `/usr/bin`. It calls `openssl` and `curl`
+by absolute path, so nothing earlier on your `PATH` can stand in for
+them. The JWT goes to `curl` on stdin, so it never appears in the
+process list. Read it before you run the installer; it is under 70
+lines.
 
 ## Run the installer
 
@@ -48,7 +51,7 @@ From the root of this repo:
 The installer runs in three stages:
 
 1. **Preflight.** It checks macOS, a zsh or bash login shell, git 2.32
-   or newer, `gh` on `PATH`, the helper, the private key and its mode,
+   or newer, `gh` on `PATH`, `openssl`, `curl` and `jq`, the private key and its mode,
    and that `~/.gitconfig` does not rewrite GitHub HTTPS to SSH. It then
    asks the helper for the App's installations. Any failure stops it
    with the reason and the fix, and nothing is changed.
@@ -72,7 +75,7 @@ and [step 04](04-claude-code-sandbox.md) look done.
 |---|---|
 | `~/.config/agent-git/gitconfig` | The agent's global gitconfig. It includes your `~/.gitconfig`, clears inherited credential helpers, adds one App helper line per owner, and rewrites SSH remotes to HTTPS |
 | `~/.config/agent-git/env.sh` | Sets `GIT_CONFIG_GLOBAL`, `GH_CONFIG_DIR` and the default owner, puts the `gh` shim first on `PATH`, unsets `SSH_AUTH_SOCK` |
-| `~/.config/agent-git/bin/git-credential-github-app` | The helper, if it was copied from your `PATH` |
+| `~/.config/agent-git/bin/git-credential-agent` | The [credential helper](#the-credential-helper), from `files/` |
 | `~/.config/agent-gh/bin/gh` | The [`gh` shim](files/gh). It finds the repo owner, gets that owner's token from git and exports it as `GH_TOKEN`, then runs the real `gh` |
 | the source line, at the end of two startup files | Loads `env.sh` only when `CLAUDECODE` is set |
 

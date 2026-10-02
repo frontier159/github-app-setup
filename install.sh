@@ -8,7 +8,7 @@ set -euo pipefail
 
 AG="$HOME/.config/agent-git"
 AH="$HOME/.config/agent-gh"
-HELPER="$AG/bin/git-credential-github-app"
+HELPER="$AG/bin/git-credential-agent"
 KEY="$AG/app.pem"
 HERE=$(cd "$(dirname "$0")" && pwd)
 SOURCE_LINE='[ -n "$CLAUDECODE" ] && [ -r "$HOME/.config/agent-git/env.sh" ] && . "$HOME/.config/agent-git/env.sh"'
@@ -56,17 +56,15 @@ if command -v git >/dev/null; then
   else problem "git $v is too old; GIT_CONFIG_GLOBAL needs git 2.32 or newer"; fi
 else problem "git not found on PATH"; fi
 command -v gh >/dev/null && ok "gh at $(command -v gh)" || problem "gh not found on PATH; the shim wraps it"
-[ -x "$HERE/files/gh" ] || problem "$HERE/files/gh missing or not executable; run from a full checkout"
-
-helper_src=""
-if [ -x "$HELPER" ]; then ok "credential helper at $(t "$HELPER")"
-elif command -v git-credential-github-app >/dev/null; then
-  helper_src=$(command -v git-credential-github-app); ok "credential helper at $(t "$helper_src") (will be copied)"
-else
-  problem "git-credential-github-app not found. Install it, then rerun:
-      go install github.com/bdellegrazie/git-credential-github-app@latest
-    or download a release from github.com/bdellegrazie/git-credential-github-app/releases"
-fi
+for f in gh git-credential-agent; do
+  [ -x "$HERE/files/$f" ] || problem "$HERE/files/$f missing or not executable; run from a full checkout"
+done
+for tool in /usr/bin/openssl /usr/bin/curl; do
+  [ -x "$tool" ] && ok "$tool" || problem "$tool not found; the credential helper signs and sends with it"
+done
+if [ -x /usr/bin/jq ]; then ok "jq at /usr/bin/jq"
+elif command -v jq >/dev/null; then ok "jq at $(command -v jq)"
+else problem "jq not found; it ships with macOS 15 and later, or: brew install jq"; fi
 
 if [ -f "$KEY" ]; then
   perms=$(stat -f '%Lp' "$KEY")
@@ -84,21 +82,16 @@ fi
 # owners holds "owner installation_id" lines.
 owners=""
 if [ $mode = install ] && [ $problems -eq 0 ]; then
-  bin=${helper_src:-$HELPER}
-  generated=$("$bin" -username x-access-token -appId "$app_id" -privateKeyFile "$KEY" generate 2>&1) \
-    || problem "listing the App's installations failed: $generated"
+  owners=$("$HERE/files/git-credential-agent" --app-id "$app_id" installations 2>&1) \
+    || { problem "listing the App's installations failed: $owners"; owners=""; }
   if [ $problems -eq 0 ]; then
-    tmp=$(mktemp); printf '%s\n' "$generated" > "$tmp"
-    owners=$(git config --file "$tmp" --get-regexp '^credential\.https://github\.com/[^.]*\.helper$' \
-      | sed -n 's#^credential\.https://github\.com/\([^ ]*\)\.helper .*-installationId \([0-9][0-9]*\).*#\1 \2#p')
-    rm -f "$tmp"
     [ -n "$owners" ] || problem "the App has no installations; install it on each owner (step 01)"
     printf '%s\n' "$owners" | awk '{print $1}' | grep -qxF "$default_owner" \
       || problem "--default-owner '$default_owner' is not one of the App's installations: $(printf '%s ' $(printf '%s\n' "$owners" | awk '{print $1}'))"
   fi
 elif [ $mode = check ] && [ -f "$AG/gitconfig" ]; then
   owners=$(git config --file "$AG/gitconfig" --get-regexp '^credential\.https://github\.com/[^.]*\.helper$' \
-    | sed -n 's#^credential\.https://github\.com/\([^ ]*\)\.helper .*-installationId \([0-9][0-9]*\).*#\1 \2#p')
+    | sed -n 's#^credential\.https://github\.com/\([^ ]*\)\.helper .*--installation-id \([0-9][0-9]*\).*#\1 \2#p')
 fi
 
 if [ $problems -gt 0 ]; then echo "Stopped: $problems problem(s) above. Nothing was changed." >&2; exit 1; fi
@@ -127,7 +120,7 @@ verify() {
   ls "$HOME"/.ssh/id_* 2>/dev/null | grep -v '\.pub$' >/dev/null \
     && echo "  - a private key file is still in ~/.ssh; step 03 moves it into a password manager" \
     || echo "  ok no private key files in ~/.ssh"
-  [ "$(plutil -extract sandbox.enabled raw "$HOME/.claude/settings.json" 2>/dev/null)" = true ] \
+  [ "$(jq -r '.sandbox.enabled // false' "$HOME/.claude/settings.json" 2>/dev/null)" = true ] \
     && echo "  ok Claude Code sandbox enabled" \
     || echo "  - Claude Code sandbox is off; see step 04"
   return $fails
@@ -139,7 +132,7 @@ if [ $mode = check ]; then verify && exit 0 || exit 1; fi
 state() { [ -e "$1" ] && echo "overwrite" || echo "create"; }
 echo
 echo "Plan"
-[ -n "$helper_src" ] && echo "  copy    $(t "$helper_src") -> $(t "$HELPER")"
+echo "  $(state "$HELPER")  $(t "$HELPER")   (from files/git-credential-agent)"
 echo "  $(state "$AG/gitconfig")  $(t "$AG/gitconfig")"
 while read -r owner id; do echo "            $owner -> installation $id"; done <<< "$owners"
 echo "  $(state "$AG/env.sh")  $(t "$AG/env.sh")   (default owner $default_owner)"
@@ -157,7 +150,7 @@ case $answer in y|Y|yes) ;; *) echo "Cancelled. Nothing was changed."; exit 1 ;;
 
 # ---- install ---------------------------------------------------------------
 mkdir -p "$AG/bin" "$AH/bin"; chmod 700 "$AG"
-[ -n "$helper_src" ] && install -m 755 "$helper_src" "$HELPER"
+install -m 755 "$HERE/files/git-credential-agent" "$HELPER"
 
 {
   echo "# Generated by install.sh; rerun it instead of editing. Read only inside agent shells."
@@ -168,7 +161,7 @@ mkdir -p "$AG/bin" "$AH/bin"; chmod 700 "$AG"
   echo "    useHttpPath = true"
   while read -r owner id; do
     echo "[credential \"https://github.com/$owner\"]"
-    echo "    helper = $HELPER -username x-access-token -appId $app_id -privateKeyFile $KEY -installationId $id"
+    echo "    helper = $HELPER --app-id $app_id --installation-id $id"
   done <<< "$owners"
   echo "[url \"https://github.com/\"]"
   echo "    insteadOf = git@github.com:"

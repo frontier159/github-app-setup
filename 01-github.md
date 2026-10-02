@@ -125,7 +125,7 @@ do it.
 
 Each owner gets its own installation ID. You do not need to record
 them: the installer in [step 02](02-agent-identity.md#run-the-installer)
-asks the App for its installations, writes one helper line per owner,
+asks GitHub for the App's installations, writes one helper line per owner,
 and tests a token for each.
 
 ## Rulesets

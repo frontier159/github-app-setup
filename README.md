@@ -10,7 +10,7 @@ You need:
 
 - macOS, with zsh or bash as your login shell.
 - git 2.32 or newer, and the `gh` CLI on your `PATH`.
-- Go, to install the credential helper, or its release binary.
+- `jq`, which ships with macOS 15 and later.
 - A password manager with an SSH agent, for [step 03](03-ssh-key-to-password-manager.md).
 - Owner rights on each GitHub org you want the agent in, or an owner
   who will approve the App.
