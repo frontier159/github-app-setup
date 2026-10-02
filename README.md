@@ -17,8 +17,9 @@ You need:
 
 Then:
 
-1. Clone this repo and `cd` into it. The installer runs from the repo
-   root.
+1. Clone this repo, check out the latest release tag, and `cd` into it.
+   The installer runs from the repo root. Read `install.sh` before you
+   run it: it edits your shell startup files.
 2. Do [step 01](01-github.md) in the browser. You end with an App ID
    and the App's private key at `~/.config/agent-git/app.pem`.
 3. Run the installer, as [step 02](02-agent-identity.md#run-the-installer)
