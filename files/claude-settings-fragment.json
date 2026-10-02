@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(~/.ssh/**)",
+      "Read(~/.config/gh/**)",
+      "Bash(security *)",
+      "Bash(git credential-osxkeychain *)"
+    ]
+  },
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "filesystem": {
+      "denyRead": ["~/.ssh", "~/.config/gh", "~/Library/Containers/com.bitwarden.desktop"]
+    },
+    "network": {
+      "allowedDomains": ["github.com", "api.github.com"],
+      "allowUnixSockets": ["~/.gnupg/S.gpg-agent"],
+      "allowLocalBinding": true
+    }
+  }
+}

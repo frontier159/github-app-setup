@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Agent-only gh: mint GH_TOKEN for the repo owner from git's credential chain, then run the real gh.
+# Bash 3.2 compatible.
+real_gh=""
+IFS=:
+for d in $PATH; do
+  [ -x "$d/gh" ] && [ ! "$d/gh" -ef "$0" ] && { real_gh="$d/gh"; break; }
+done
+unset IFS
+[ -n "$real_gh" ] || { echo "gh: real gh not found on PATH" >&2; exit 127; }
+
+if [ -z "${GH_TOKEN:-}" ]; then
+  owner="" prev=""
+  for a in "$@"; do
+    case $prev in -R|--repo) owner=${a%%/*} ;; esac
+    case $a in
+      --repo=*) o=${a#--repo=}; owner=${o%%/*} ;;
+      -R?*) o=${a#-R}; owner=${o%%/*} ;;
+    esac
+    prev=$a
+  done
+  if [ -z "$owner" ]; then
+    url=$(git remote get-url origin 2>/dev/null || true)
+    case $url in *github.com[:/]*) o=${url#*github.com[:/]}; owner=${o%%/*} ;; esac
+  fi
+  owner=${owner:-${AGENT_GH_DEFAULT_OWNER:-}}
+  token=$(printf 'protocol=https\nhost=github.com\npath=%s/_.git\n\n' "$owner" \
+          | git credential fill 2>/dev/null | sed -n 's/^password=//p')
+  [ -n "$token" ] && export GH_TOKEN="$token"
+fi
+exec "$real_gh" "$@"

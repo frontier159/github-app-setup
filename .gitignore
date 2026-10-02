@@ -1,0 +1,2 @@
+# App private keys never belong in this repo.
+*.pem
