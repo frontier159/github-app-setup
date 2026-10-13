@@ -271,7 +271,7 @@ counterpart.
 | Installer and shell | `install.sh` supports zsh and bash login shells | The installer and the `gh` shim are bash 3.2 and the env file is POSIX, so both shells work. The installer refuses Linux for now: it reads file modes with macOS `stat -f` |
 | Sandbox | Seatbelt, built in | bubblewrap + socat; install them first. Same settings keys |
 | Password-manager agent | Bitwarden or 1Password sockets as in [03](03-ssh-key-to-password-manager.md) | Socket paths differ by package (deb, snap, flatpak); check the vendor docs. 1Password: `~/.1password/agent.sock`. No Secretive; gnome-keyring or KeePassXC agents also work |
-| Break-glass backup | `hdiutil` encrypted image | LUKS image, or `tar -C ~ -c .ssh \| gpg -c > breakglass-ssh.tar.gpg` |
+| Key backup | the Bitwarden vault item, plus an optional encrypted vault export | same |
 | Clipboard | `pbcopy` | `wl-copy` or `xclip` |
 | Keychain | login keychain via `security` | Secret Service (libsecret); the `helper =` reset already clears it for git |
 | Home | `/Users/alice` | `/home/alice` |

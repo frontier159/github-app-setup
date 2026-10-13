@@ -31,68 +31,78 @@ lives in an app container, add that container to `denyRead` in [step 04](04-clau
 
 ## Inventory
 
-Before touching the key, list where it is used:
+Before touching the key, find every private key and everything that
+uses one. These commands print names, paths and fingerprints, never key
+contents:
 
 ```zsh
 ssh-keygen -lf ~/.ssh/id_rsa.pub                   # fingerprint; compare with GitHub → Settings → SSH keys
+ls ~/.ssh | grep -v -E '\.pub$|^known_hosts|^config$|^authorized_keys$'   # private keys, and anything else
 grep -n 'IdentityFile\|Host ' ~/.ssh/config 2>/dev/null
-grep -rl 'id_rsa' ~/Library/LaunchAgents ~/.config 2>/dev/null   # unattended users of the file
+git config --global --get core.sshCommand
+grep -rIl 'id_rsa' ~/Library/LaunchAgents ~/.config ~/.zshrc ~/.zprofile ~/.zshenv ~/bin ~/.local/bin 2>/dev/null
 crontab -l 2>/dev/null | grep -n ssh
+head -1 ~/.ssh/id_rsa                              # the format line only
 ```
 
-Interactive uses (servers, GitHub, other git hosts) keep working once
-the agent serves the key. Unattended uses (launchd, cron, scripts with
-`-i ~/.ssh/id_rsa`) break by design and need their own key. List them;
-they are the break-glass cases.
-
-## Break-glass backup
-
-An encrypted disk image, offline, holding the whole `~/.ssh`:
-
-```zsh
-hdiutil create -size 20m -fs APFS -encryption AES-256 -volname breakglass-ssh ~/Desktop/breakglass-ssh.dmg
-hdiutil attach ~/Desktop/breakglass-ssh.dmg
-cp -Rp ~/.ssh /Volumes/breakglass-ssh/ssh-$(date +%Y%m%d)
-diff -r ~/.ssh /Volumes/breakglass-ssh/ssh-$(date +%Y%m%d) && echo backup-verified
-hdiutil detach /Volumes/breakglass-ssh
-```
-
-`hdiutil` prompts for the passphrase. diff reports sockets
-(ControlMaster) as differing; those lines are expected.
-
-Store the passphrase in Bitwarden as a separate login item. Move the
-`.dmg` to a USB stick or your existing backup target. Do not leave it in
-`~/Desktop`; any process running as your user can read it.
-
-Second copy: Bitwarden's own encrypted export (Settings → Export vault →
-**.json (Encrypted)**) includes SSH key items. CSV does not.
+- **Each private key** listed by `ls` gets the treatment below. An
+  `agent` folder is not a key: newer OpenSSH keeps agent sockets there.
+- **Interactive uses**, such as GitHub, servers and other git hosts,
+  keep working once the agent serves the key.
+- **Unattended uses**, such as launchd, cron or scripts with
+  `-i ~/.ssh/id_rsa`, break by design and need their own key. See
+  [Unattended users and migration](#unattended-users-and-migration).
+- **The format line** says whether the key imports as is.
+  `-----BEGIN OPENSSH PRIVATE KEY-----` does.
+  `-----BEGIN RSA PRIVATE KEY-----` is legacy PEM and needs converting
+  first.
 
 ## Import into Bitwarden
 
-Bitwarden accepts OpenSSH and PKCS#8 formats. A key that begins with
-`-----BEGIN RSA PRIVATE KEY-----` is legacy PEM. Convert a copy inside
-the mounted image first:
+The Bitwarden item becomes the key's home and its backup. The vault
+encrypts it and syncs it to your other devices, so you need no separate
+copy on disk.
+
+Bitwarden accepts OpenSSH and PKCS#8 formats. If the format line said
+`RSA PRIVATE KEY`, or the key has a passphrase, make an unencrypted
+OpenSSH copy in a private temporary folder. The vault's encryption
+replaces the passphrase:
 
 ```zsh
-hdiutil attach ~/path/to/breakglass-ssh.dmg
-cp /Volumes/breakglass-ssh/ssh-*/id_rsa /Volumes/breakglass-ssh/id_rsa.openssh
-ssh-keygen -p -o -N "" -f /Volumes/breakglass-ssh/id_rsa.openssh    # OpenSSH format, no passphrase; the vault encrypts it
-head -1 /Volumes/breakglass-ssh/id_rsa.openssh                       # must say OPENSSH PRIVATE KEY
+T=$(mktemp -d) && cp ~/.ssh/id_rsa "$T/key" && ssh-keygen -p -o -N "" -f "$T/key" && head -1 "$T/key"
 ```
+
+It must print `-----BEGIN OPENSSH PRIVATE KEY-----`. Otherwise, skip
+that command and copy straight from `~/.ssh/id_rsa` below.
 
 In the Bitwarden desktop app: **New item → SSH key**, name it
-`github / servers rsa (alice)`. Then use **Import key from clipboard**.
-
-Pause any clipboard manager and turn off Handoff, or the key lands in
-clipboard history.
+`github / servers rsa (alice)`. Pause any clipboard manager and turn off
+Handoff first, or the key lands in clipboard history. Then:
 
 ```zsh
-pbcopy < /Volumes/breakglass-ssh/id_rsa.openssh
-# click "Import key from clipboard" in Bitwarden, confirm the fingerprint matches the inventory
-pbcopy < /dev/null                                                   # clear the clipboard
-rm /Volumes/breakglass-ssh/id_rsa.openssh
-hdiutil detach /Volumes/breakglass-ssh
+pbcopy < ~/.ssh/id_rsa            # or < "$T/key" if you converted
 ```
+
+Click **Import key from clipboard**, and check the fingerprint
+Bitwarden shows matches the one from the inventory. Save the item, then
+clear the clipboard and any converted copy:
+
+```zsh
+pbcopy < /dev/null; [ -n "${T:-}" ] && rm -rf "$T"
+```
+
+## Optional: a copy that does not depend on Bitwarden
+
+The vault item is enough for GitHub: if you ever lose it, sign in on
+the web and add a new key. It matters for a server where this key is
+your only way in.
+
+For an independent copy, use Bitwarden's encrypted export: **Settings
+→ Export vault**, format **.json (Encrypted)**, with a password you
+choose and keep somewhere other than this vault. It includes SSH key
+items. The file is encrypted, so a cloud folder such as iCloud Drive is
+a reasonable place for it. Do not use the CSV export: it leaves out SSH
+keys and is not encrypted.
 
 ## Enable the agent
 
@@ -135,7 +145,7 @@ shows whether the agent was reached.
 Once GitHub and your servers work through the agent:
 
 ```zsh
-rm ~/.ssh/id_rsa.disabled              # the backup is the .dmg and the vault
+rm ~/.ssh/id_rsa.disabled              # the vault item is the copy
 ls ~/.ssh                              # id_rsa.pub may stay; it is public
 ```
 
@@ -157,9 +167,16 @@ item.
 
 ## Break-glass
 
-Mount the `.dmg`, then run `ssh -i /Volumes/breakglass-ssh/ssh-*/id_rsa
-host`, or `GIT_SSH_COMMAND='ssh -i /Volumes/breakglass-ssh/ssh-*/id_rsa'
-git ...`. Detach afterwards. Never copy the key back to `~/.ssh`.
+For a job that needs the key as a file, copy the private key from the
+Bitwarden item, then use it from a private temporary folder:
+
+```zsh
+T=$(mktemp -d) && pbpaste > "$T/key" && chmod 600 "$T/key" && pbcopy < /dev/null
+ssh -i "$T/key" host                   # or GIT_SSH_COMMAND="ssh -i $T/key" git ...
+rm -rf "$T"
+```
+
+Never copy the key back to `~/.ssh`.
 
 ## Checks
 
@@ -178,5 +195,10 @@ Bitwarden prompt.
 
 ## Rollback
 
-Copy `id_rsa` from the `.dmg` back to `~/.ssh/id_rsa` (`chmod 600`).
+Copy the private key from the Bitwarden item, then:
+
+```zsh
+pbpaste > ~/.ssh/id_rsa && chmod 600 ~/.ssh/id_rsa && pbcopy < /dev/null
+```
+
 Remove the `SSH_AUTH_SOCK` line.
