@@ -64,16 +64,20 @@ encrypts it and syncs it to your other devices, so you need no separate
 copy on disk.
 
 Bitwarden accepts OpenSSH and PKCS#8 formats. If the format line said
-`RSA PRIVATE KEY`, or the key has a passphrase, make an unencrypted
-OpenSSH copy in a private temporary folder. The vault's encryption
-replaces the passphrase:
+`OPENSSH PRIVATE KEY` and the key has no passphrase, skip to the next
+paragraph and copy straight from `~/.ssh/id_rsa`.
+
+Only if the format line said `RSA PRIVATE KEY`, or the key has a
+passphrase, make an unencrypted OpenSSH copy in a private temporary
+folder. The vault's encryption replaces the passphrase:
 
 ```zsh
 T=$(mktemp -d) && cp ~/.ssh/id_rsa "$T/key" && ssh-keygen -p -o -N "" -f "$T/key" && head -1 "$T/key"
 ```
 
-It must print `-----BEGIN OPENSSH PRIVATE KEY-----`. Otherwise, skip
-that command and copy straight from `~/.ssh/id_rsa` below.
+It asks for the old passphrase if there is one, and prints only the
+format line, which is the same for every key. That line must now read
+`-----BEGIN OPENSSH PRIVATE KEY-----`.
 
 In the Bitwarden desktop app: **New item → SSH key**, name it
 `github / servers rsa (alice)`. Pause any clipboard manager and turn off
