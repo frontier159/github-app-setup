@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Agent-only gh: mint GH_TOKEN for the repo owner from git's credential chain, then run the real gh.
+# Agent-only gh: get the repo owner's token from git's credential chain as GH_TOKEN, then run the real gh.
 # Bash 3.2 compatible.
 real_gh=""
 IFS=:
@@ -8,6 +8,13 @@ for d in $PATH; do
 done
 unset IFS
 [ -n "$real_gh" ] || { echo "gh: real gh not found on PATH" >&2; exit 127; }
+
+# The agent acts as you, so its approvals count as yours. Refuse them here; this
+# is a speed bump, not a boundary.
+case "${1:-} ${2:-}" in
+  "pr review") for a in "$@"; do case $a in -a|--approve) echo "gh: agents do not approve PRs; leave a comment review instead" >&2; exit 1 ;; esac; done ;;
+  "api "*) for a in "$@"; do case $a in *APPROVE*) echo "gh: agents do not approve PRs; leave a comment review instead" >&2; exit 1 ;; esac; done ;;
+esac
 
 if [ -z "${GH_TOKEN:-}" ]; then
   owner="" prev=""

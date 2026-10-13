@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# Sets up step 02: the agent's own git and gh identity through a GitHub App.
+# Sets up step 02: agent shells use a restricted fine-grained PAT per owner for git and gh.
 # Bash 3.2 compatible (macOS /bin/bash). Rerunning is safe.
 #
-#   ./install.sh --app-id <id> --default-owner <owner>   show the plan, confirm, install, verify
-#   ./install.sh --check                                 verify only, change nothing
+#   ./install.sh --owner <owner> [--owner <owner>]... --default-owner <owner>   plan, confirm, install, verify
+#   ./install.sh --check                                                       verify only, change nothing
 set -euo pipefail
 
 AG="$HOME/.config/agent-git"
 AH="$HOME/.config/agent-gh"
+TOKENS="$AG/tokens"
 HELPER="$AG/bin/git-credential-agent"
-KEY="$AG/app.pem"
 HERE=$(cd "$(dirname "$0")" && pwd)
 SOURCE_LINE='[ -n "$CLAUDECODE" ] && [ -r "$HOME/.config/agent-git/env.sh" ] && . "$HOME/.config/agent-git/env.sh"'
 
@@ -17,32 +17,34 @@ usage() { sed -n '5,6p' "$0" | sed 's/^# *//' >&2; exit 2; }
 problems=0
 problem() { printf '  x %s\n' "$*" >&2; problems=$((problems + 1)); }
 ok() { printf '  ok %s\n' "$*"; }
+note() { printf '  - %s\n' "$*"; }
 t() { printf '%s' "${1/#$HOME/~}"; }   # show a path relative to ~
+is_login() { case $1 in ''|-*|*-|*[!A-Za-z0-9-]*) return 1 ;; esac; }
 
-mode=install app_id="" default_owner=""
+mode=install owners="" default_owner=""
 while [ $# -gt 0 ]; do
   case $1 in
-    --app-id) app_id=${2:-}; shift 2 ;;
+    --owner) is_login "${2:-}" || { echo "install: --owner must be a GitHub login" >&2; usage; }; owners="$owners $2"; shift 2 ;;
     --default-owner) default_owner=${2:-}; shift 2 ;;
     --check) mode=check; shift ;;
     *) usage ;;
   esac
 done
 if [ $mode = install ]; then
-  case $app_id in ''|*[!0-9]*) echo "install: --app-id must be the numeric App ID from step 01" >&2; usage ;; esac
-  case $default_owner in
-    ''|-*|*-|*[!A-Za-z0-9-]*) echo "install: --default-owner must be a GitHub login: letters, digits and inner hyphens" >&2; usage ;;
-  esac
+  [ -n "$owners" ] || { echo "install: give at least one --owner" >&2; usage; }
+  is_login "$default_owner" || { echo "install: --default-owner must be a GitHub login" >&2; usage; }
+  case " $owners " in *" $default_owner "*) ;; *) echo "install: --default-owner must be one of the --owner values" >&2; usage ;; esac
+else
+  owners=$(ls "$TOKENS" 2>/dev/null | tr '\n' ' ' || true)
 fi
 
-# The startup files the agent's login shell reads, last line first.
+# The startup files the agent's login shell reads.
 startup_files() {
   case $(basename "${SHELL:-}") in
     zsh) echo "$HOME/.zshenv $HOME/.zprofile" ;;
     bash) echo "$HOME/.bash_profile $HOME/.bashrc" ;;
   esac
 }
-
 last_line() { [ -f "$1" ] && grep -v '^[[:space:]]*$' "$1" | tail -1 || true; }
 
 # ---- preflight -------------------------------------------------------------
@@ -61,71 +63,77 @@ command -v gh >/dev/null && ok "gh at $(command -v gh)" || problem "gh not found
 for f in gh git-credential-agent; do
   [ -x "$HERE/files/$f" ] || problem "$HERE/files/$f missing or not executable; run from a full checkout"
 done
-for tool in /usr/bin/openssl /usr/bin/curl; do
-  [ -x "$tool" ] && ok "$tool" || problem "$tool not found; the credential helper signs and sends with it"
-done
-if [ -x /usr/bin/jq ]; then ok "jq at /usr/bin/jq"
-elif command -v jq >/dev/null; then ok "jq at $(command -v jq)"
-else problem "jq not found; it ships with macOS 15 and later, or: brew install jq"; fi
-
-if [ -f "$KEY" ]; then
-  perms=$(stat -f '%Lp' "$KEY")
-  [ "$perms" = 600 ] && ok "App private key at $(t "$KEY")" || problem "$(t "$KEY") has mode $perms; run: chmod 600 $(t "$KEY")"
-else problem "App private key not found at $(t "$KEY"); see step 01, Private key"; fi
-
 if [ -f "$HOME/.gitconfig" ]; then
   reverse=$(git config --file "$HOME/.gitconfig" --includes --get-regexp '^url\..*\.insteadof$' 2>/dev/null \
             | grep -E '^url\.(git@github\.com:|ssh://git@github\.com/?)\.insteadof +https://github\.com' || true)
   [ -z "$reverse" ] && ok "no HTTPS-to-SSH rewrite in ~/.gitconfig" \
     || problem "~/.gitconfig rewrites GitHub HTTPS to SSH; remove it, the agent config cannot cancel it: $reverse"
 fi
-
-# ---- installations ---------------------------------------------------------
-# owners holds "owner installation_id" lines.
-owners=""
-if [ $mode = install ] && [ $problems -eq 0 ]; then
-  owners=$("$HERE/files/git-credential-agent" --app-id "$app_id" installations 2>&1) \
-    || { problem "listing the App's installations failed: $owners"; owners=""; }
-  if [ $problems -eq 0 ]; then
-    [ -n "$owners" ] || problem "the App has no installations; install it on each owner (step 01)"
-    printf '%s\n' "$owners" | awk '{print $1}' | grep -qxF "$default_owner" \
-      || problem "--default-owner '$default_owner' is not one of the App's installations: $(printf '%s ' $(printf '%s\n' "$owners" | awk '{print $1}'))"
-  fi
-elif [ $mode = check ] && [ -f "$AG/gitconfig" ]; then
-  owners=$(git config --file "$AG/gitconfig" --get-regexp '^credential\.https://github\.com/[^.]*\.helper$' \
-    | sed -n 's#^credential\.https://github\.com/\([^ ]*\)\.helper .*--installation-id \([0-9][0-9]*\).*#\1 \2#p')
+if [ $mode = install ]; then
+  for o in $owners; do
+    [ -s "$TOKENS/$o" ] && continue
+    [ -t 0 ] || problem "no token stored for $o, and no terminal to paste one into; run the installer in a terminal"
+  done
 fi
-
 if [ $problems -gt 0 ]; then echo "Stopped: $problems problem(s) above. Nothing was changed." >&2; exit 1; fi
 
-# ---- verification (also run after install) ---------------------------------
+# ---- token checks (install and --check) ------------------------------------
+# A fine-grained PAT, valid, not near expiry, able to see the owner's repos, refused admin.
+check_token() {
+  local owner=$1 f="$TOKENS/$1" token cfg headers login expiry expires days repo code
+  [ -s "$f" ] || { problem "$owner: no token at $(t "$f")"; return 1; }
+  [ "$(stat -f '%Lp' "$f")" = 600 ] || { problem "$owner: $(t "$f") must be mode 600"; return 1; }
+  token=$(cat "$f")
+  case $token in
+    github_pat_*) ;;
+    *) problem "$owner: not a fine-grained PAT; classic and OAuth tokens reach every repo and can administer them"; return 1 ;;
+  esac
+  cfg=$(mktemp -d)
+  headers=$(GH_TOKEN=$token GH_CONFIG_DIR=$cfg command gh api -i user 2>/dev/null) || {
+    rm -rf "$cfg"; problem "$owner: GitHub rejected the token; it may be expired or revoked"; return 1; }
+  login=$(printf '%s\n' "$headers" | grep -o '"login": *"[^"]*"' | head -1 | sed 's/.*"\([^"]*\)"$/\1/')
+  expiry=$(printf '%s\n' "$headers" | tr -d '\r' | sed -n 's/^[Gg]ithub-[Aa]uthentication-[Tt]oken-[Ee]xpiration: //p' | head -1)
+  if [ -n "$expiry" ]; then
+    if expires=$(date -j -u -f '%Y-%m-%d %H:%M:%S' "${expiry% UTC}" +%s 2>/dev/null); then
+      days=$(( (expires - $(date +%s)) / 86400 ))
+      [ "$days" -ge 14 ] && ok "$owner: token works as $login, expires in $days days" \
+        || note "$owner: token works as $login but expires in $days days; replace it soon"
+    else
+      ok "$owner: token works as $login, expires $expiry"
+    fi
+  else
+    ok "$owner: token works as $login, no expiry"
+  fi
+  repo=$(GH_TOKEN=$token GH_CONFIG_DIR=$cfg command gh api '/user/repos?per_page=100' \
+    --jq "[.[] | select(.owner.login | ascii_downcase == \"$(printf '%s' "$owner" | tr 'A-Z' 'a-z')\")][0].full_name // empty" 2>/dev/null || true)
+  if [ -z "$repo" ]; then
+    note "$owner: the token sees none of $owner's repos; check its resource owner and repository access"
+  else
+    code=$(GH_TOKEN=$token GH_CONFIG_DIR=$cfg command gh api "repos/$repo/hooks" 2>&1 | grep -o 'HTTP [0-9]*' | head -1 || true)
+    [ "$code" = "HTTP 403" ] && ok "$owner: admin-only call refused (403 on $repo)" \
+      || problem "$owner: admin-only call on $repo gave '${code:-success}'; set Administration to No access"
+  fi
+  rm -rf "$cfg"
+}
+
 verify() {
   echo "Verify"
-  local fails=0 f owner id token count
-  [ -x "$AH/bin/gh" ] && [ -f "$AG/gitconfig" ] && [ -f "$AG/env.sh" ] && ok "agent files installed" \
-    || { problem "agent files missing; run install"; fails=1; }
+  local f o before=$problems
+  [ -x "$AH/bin/gh" ] && [ -x "$HELPER" ] && [ -f "$AG/gitconfig" ] && [ -f "$AG/env.sh" ] && ok "agent files installed" \
+    || problem "agent files missing; run install"
   for f in $(startup_files); do
     [ "$(last_line "$f")" = "$SOURCE_LINE" ] && ok "$(basename "$f") ends with the source line" \
-      || { problem "$(basename "$f") does not end with the source line; rerun install"; fails=1; }
+      || problem "$(basename "$f") does not end with the source line; rerun install"
   done
-  while read -r owner id; do
-    [ -n "$owner" ] || continue
-    token=$(printf 'protocol=https\nhost=github.com\npath=%s/_.git\n\n' "$owner" \
-      | GIT_CONFIG_GLOBAL="$AG/gitconfig" GIT_TERMINAL_PROMPT=0 git credential fill 2>/dev/null | sed -n 's/^password=//p')
-    if [ -z "$token" ]; then problem "$owner: no token minted (installation $id)"; fails=1; continue; fi
-    count=$(GH_TOKEN="$token" GH_CONFIG_DIR="$AH" command gh api /installation/repositories --jq .total_count 2>/dev/null) \
-      && ok "$owner: App token works, $count repo(s) selected" \
-      || { problem "$owner: token minted but the API call failed"; fails=1; }
-  done <<< "$owners"
-  [ -z "$owners" ] && { problem "no owners configured"; fails=1; }
+  [ -n "${owners// /}" ] || problem "no tokens stored in $(t "$TOKENS")"
+  for o in $owners; do check_token "$o" || true; done
   echo "Steps 03 and 04 (advisory)"
   ls "$HOME"/.ssh/id_* 2>/dev/null | grep -v '\.pub$' >/dev/null \
-    && echo "  - a private key file is still in ~/.ssh; step 03 moves it into a password manager" \
-    || echo "  ok no private key files in ~/.ssh"
-  [ "$(jq -r '.sandbox.enabled // false' "$HOME/.claude/settings.json" 2>/dev/null)" = true ] \
-    && echo "  ok Claude Code sandbox enabled" \
-    || echo "  - Claude Code sandbox is off; see step 04"
-  return $fails
+    && note "a private key file is still in ~/.ssh; step 03 moves it into a password manager" \
+    || ok "no private key files in ~/.ssh"
+  [ "$(/usr/bin/plutil -extract sandbox.enabled raw -o - "$HOME/.claude/settings.json" 2>/dev/null)" = true ] \
+    && ok "Claude Code sandbox enabled" || note "Claude Code sandbox is off; see step 04"
+  [ $problems -eq $before ]
 }
 
 if [ $mode = check ]; then verify && exit 0 || exit 1; fi
@@ -134,9 +142,12 @@ if [ $mode = check ]; then verify && exit 0 || exit 1; fi
 state() { [ -e "$1" ] && echo "overwrite" || echo "create"; }
 echo
 echo "Plan"
+for o in $owners; do
+  [ -s "$TOKENS/$o" ] && echo "  keep    $(t "$TOKENS/$o")   (stored token)" \
+                      || echo "  create  $(t "$TOKENS/$o")   (you paste $o's PAT next, hidden)"
+done
 echo "  $(state "$HELPER")  $(t "$HELPER")   (from files/git-credential-agent)"
 echo "  $(state "$AG/gitconfig")  $(t "$AG/gitconfig")"
-while read -r owner id; do echo "            $owner -> installation $id"; done <<< "$owners"
 echo "  $(state "$AG/env.sh")  $(t "$AG/env.sh")   (default owner $default_owner)"
 echo "  $(state "$AH/bin/gh")  $(t "$AH/bin/gh")   (from files/gh)"
 for f in $(startup_files); do
@@ -145,30 +156,42 @@ for f in $(startup_files); do
   else echo "  append  the source line to $(t "$f")"; fi
 done
 echo "  source line: $SOURCE_LINE"
-echo "Nothing else changes. Your ~/.gitconfig, ~/.ssh and gh login are not touched."
+echo "Nothing else changes. Your ~/.gitconfig, ~/.ssh and own gh login are not touched."
 printf 'Proceed? [y/N] '
 read -r answer || answer=""
 case $answer in y|Y|yes) ;; *) echo "Cancelled. Nothing was changed."; exit 1 ;; esac
 
 # ---- install ---------------------------------------------------------------
-mkdir -p "$AG/bin" "$AH/bin"; chmod 700 "$AG"
+umask 077
+trap 'stty echo </dev/tty 2>/dev/null || true' EXIT
+mkdir -p "$AG/bin" "$AH/bin" "$TOKENS"; chmod 700 "$AG" "$TOKENS"
+for o in $owners; do
+  [ -s "$TOKENS/$o" ] && continue
+  while :; do
+    # Echo goes off before the prompt appears, so nothing pasted early is shown.
+    stty -echo </dev/tty
+    printf "Paste the agent's PAT for %s (input hidden): " "$o"
+    read -r token </dev/tty || token=""
+    stty echo </dev/tty; echo
+    case $token in *[[:space:]]*) ;; github_pat_?*) break ;; esac
+    echo "  That is not a fine-grained PAT (github_pat_…). Try again." >&2
+  done
+  printf '%s' "$token" > "$TOKENS/$o"; chmod 600 "$TOKENS/$o"; unset token
+done
 install -m 755 "$HERE/files/git-credential-agent" "$HELPER"
 
-{
-  echo "# Generated by install.sh; rerun it instead of editing. Read only inside agent shells."
-  echo "[include]"
-  echo "    path = ~/.gitconfig"
-  echo "[credential]"
-  echo "    helper ="
-  echo "    useHttpPath = true"
-  while read -r owner id; do
-    echo "[credential \"https://github.com/$owner\"]"
-    echo "    helper = $HELPER --app-id $app_id --installation-id $id"
-  done <<< "$owners"
-  echo "[url \"https://github.com/\"]"
-  echo "    insteadOf = git@github.com:"
-  echo "    insteadOf = ssh://git@github.com/"
-} > "$AG/gitconfig"
+cat > "$AG/gitconfig" <<CFG
+# Generated by install.sh; rerun it instead of editing. Read only inside agent shells.
+[include]
+    path = ~/.gitconfig
+[credential]
+    helper =
+    helper = $HELPER
+    useHttpPath = true
+[url "https://github.com/"]
+    insteadOf = git@github.com:
+    insteadOf = ssh://git@github.com/
+CFG
 chmod 600 "$AG/gitconfig"
 
 cat > "$AG/env.sh" <<ENV
@@ -183,7 +206,6 @@ gh() { "\$HOME/.config/agent-gh/bin/gh" "\$@"; }
 unset SSH_AUTH_SOCK
 ENV
 chmod 600 "$AG/env.sh"
-
 install -m 755 "$HERE/files/gh" "$AH/bin/gh"
 
 for f in $(startup_files); do
@@ -195,4 +217,4 @@ for f in $(startup_files); do
 done
 
 echo "Installed."
-verify && echo "Done. New agent sessions use the App; open a new one to pick it up." || exit 1
+verify && echo "Done. Open a new agent session to pick it up." || exit 1

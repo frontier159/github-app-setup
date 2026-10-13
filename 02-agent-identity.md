@@ -1,20 +1,21 @@
-# Step 02: Give the agent its own git and `gh` identity
+# Step 02: Route the agent's git and `gh` through its tokens
 
 | | |
 |---|---|
 | Required | yes |
 | Depends on | [step 01](01-github.md) |
-| If you skip it: security | The agent keeps using your SSH key and `gh` login, so GitHub cannot tell it from you. |
+| If you skip it: security | The agent keeps using your SSH key and your own `gh` login. |
 | If you skip it: operations | [Steps 03](03-ssh-key-to-password-manager.md) and [04](04-claude-code-sandbox.md) then break the agent's GitHub access entirely. |
 | If you skip it: change elsewhere | Skip [03](03-ssh-key-to-password-manager.md) and [04](04-claude-code-sandbox.md) too. |
 
 Mechanism: Claude Code sets `CLAUDECODE=1` in every Bash shell, in the
 CLI and in Desktop. Two source lines load an env file only when that
-marker is set. The env file points git at an agent-only global config.
-It points `gh` at a config dir with no stored login, and defines a
-`gh` shell function that calls the `gh` shim. It unsets
-`SSH_AUTH_SOCK`. Your own shells never
-set `CLAUDECODE`, so nothing changes for you.
+marker is set. The env file points git at an agent-only global config,
+which sends git over HTTPS with the agent's token for the repo's owner.
+It points `gh` at a config dir with no stored login, and defines a `gh`
+shell function that calls the `gh` shim, which uses the same tokens. It
+unsets `SSH_AUTH_SOCK`. Your own shells never set `CLAUDECODE`, so
+nothing changes for you.
 
 ## Routing, not a boundary
 
@@ -25,18 +26,17 @@ starts. Inside its own commands it can still step around the routing:
 as `/opt/homebrew/bin/gh`. An agent that hits a refusal may try exactly
 this.
 
-So this step makes the App the agent's default path. It does not keep
+So this step makes the restricted tokens the agent's default path. It does not keep
 the agent on it. What a bypass reaches depends on the later steps:
 
 | Done | What the agent reaches by stepping around the routing |
 |---|---|
-| Only 01 and 02 | your SSH key file and your own `gh` login: everything you can do |
+| Only 01 and 02 | your SSH key file, which can do anything you can over git; your [own `gh` login](01-github.md#restrict-your-own-gh-login) is already restricted |
 | Plus [03](03-ssh-key-to-password-manager.md) | no key file; your password manager prompts for each use, so you see it |
 | Plus [04](04-claude-code-sandbox.md) | reading `~/.ssh` and opening agent sockets fail, so SSH as you fails |
-| Plus a [restricted `gh` login](01-github.md#optional-restrict-your-own-gh-login) | your keychain token, limited to ordinary PR and issue work |
 
-Do 03, 04 and the `gh` restriction if you want a bypass to gain
-nothing. These make one less likely, but none is a boundary:
+Do 03 and 04 if you want a bypass to gain nothing over the agent's own
+tokens. These make one less likely, but none is a boundary:
 
 - **Auto mode's classifier** tends to block deliberate workarounds of a
   refusal.
@@ -49,53 +49,50 @@ nothing. These make one less likely, but none is a boundary:
 
 ## Before you run it
 
-- Steps in [01](01-github.md) are done: the App exists, is installed on
-  each owner, and its private key is at `~/.config/agent-git/app.pem`
-  with mode 600.
-- `jq` is available. It ships with macOS 15 and later as
-  `/usr/bin/jq`. On older macOS, `brew install jq`.
+- [Step 01](01-github.md) is done: you have the agent's token for each
+  owner, ready to paste.
+- You run the installer in a terminal, so it can ask for each token
+  with your typing hidden.
 
 ## The credential helper
 
-[`files/git-credential-agent`](files/git-credential-agent) is the only
-code that reads the App's private key, so it lives in this repo and
-uses nothing third-party. It signs a nine-minute JWT with the key using
-`/usr/bin/openssl`, and posts it to GitHub with `/usr/bin/curl` in
-exchange for a one-hour installation token. It reads GitHub's reply with
-`jq`, preferring the copy in `/usr/bin`. It calls `openssl` and `curl`
-by absolute path, so nothing earlier on your `PATH` can stand in for
-them. The JWT goes to `curl` on stdin, so it never appears in the
-process list. Read it before you run the installer; it is under 70
-lines.
+[`files/git-credential-agent`](files/git-credential-agent) is about 25
+lines. When git needs a password for `github.com`, it takes the repo's
+owner from the path git asks about and returns the token stored in
+`~/.config/agent-git/tokens/<owner>`. Any other host, or an owner with
+no token file, gets nothing, so git fails instead of falling back to
+another credential. Read it before you run the installer.
 
 ## Run the installer
 
 From the root of this repo:
 
 ```bash
-./install.sh --app-id <APP_ID> --default-owner <OWNER>
+./install.sh --owner ExampleOrg --owner alice --default-owner ExampleOrg
 ```
 
-- `--app-id` is the App ID from [step 01](01-github.md#register-the-app).
+- `--owner` names an owner the agent works in. Repeat it for each.
 - `--default-owner` is the owner `gh` uses when it is run outside a
-  repo. It must be one of the App's installations.
+  repo. It must be one of the `--owner` values.
 
 The installer runs in three stages:
 
 1. **Preflight.** It checks macOS, a zsh or bash login shell, git 2.32
-   or newer, `gh` on `PATH`, `openssl`, `curl` and `jq`, the private key and its mode,
-   and that `~/.gitconfig` does not rewrite GitHub HTTPS to SSH. It then
-   asks the helper for the App's installations. Any failure stops it
-   with the reason and the fix, and nothing is changed.
-2. **Plan.** It prints every file it will create or overwrite, the
-   owners and installation IDs it found, and each startup-file line it
-   will add or move. It waits for `y`. Anything else cancels.
-3. **Install and verify.** It writes the files, then mints a token for
-   each owner and makes one API call with it. It reports any owner that
-   fails.
+   or newer, `gh` on `PATH`, and that `~/.gitconfig` does not rewrite
+   GitHub HTTPS to SSH. Any failure stops it with the reason and the
+   fix, and nothing is changed.
+2. **Plan.** It prints every file it will create or overwrite, which
+   tokens it will ask for, and each startup-file line it will add or
+   move. It waits for `y`. Anything else cancels.
+3. **Install and verify.** It asks you to paste each token it does not
+   have yet, with echo off, and refuses anything that is not a
+   fine-grained PAT. It writes the files, then checks every token: that
+   GitHub accepts it, how long until it expires, and that an admin-only
+   call is refused.
 
-Rerun it whenever you install the App on another owner. A rerun
-rewrites its own files and changes nothing else.
+Rerun it to add an owner. A rerun keeps stored tokens, rewrites its own
+files and changes nothing else. To replace a token, delete its file and
+rerun.
 
 `./install.sh --check` repeats the verification without changing
 anything. It also reports whether [step 03](03-ssh-key-to-password-manager.md)
@@ -105,7 +102,8 @@ and [step 04](04-claude-code-sandbox.md) look done.
 
 | Path | What it is |
 |---|---|
-| `~/.config/agent-git/gitconfig` | The agent's global gitconfig. It includes your `~/.gitconfig`, clears inherited credential helpers, adds one App helper line per owner, and rewrites SSH remotes to HTTPS |
+| `~/.config/agent-git/tokens/<owner>` | One token per owner, mode 600, in a folder only you can read |
+| `~/.config/agent-git/gitconfig` | The agent's global gitconfig. It includes your `~/.gitconfig`, clears inherited credential helpers, adds the agent's helper, and rewrites SSH remotes to HTTPS |
 | `~/.config/agent-git/env.sh` | Sets `GIT_CONFIG_GLOBAL`, `GH_CONFIG_DIR` and the default owner, defines a `gh` function that calls the shim, unsets `SSH_AUTH_SOCK` |
 | `~/.config/agent-git/bin/git-credential-agent` | The [credential helper](#the-credential-helper), from `files/` |
 | `~/.config/agent-gh/bin/gh` | The [`gh` shim](files/gh). It finds the repo owner, gets that owner's token from git and exports it as `GH_TOKEN`, then runs the real `gh` |
@@ -115,11 +113,9 @@ The startup files are `~/.zshenv` and `~/.zprofile` for zsh, and
 `~/.bash_profile` and `~/.bashrc` for bash. Your `~/.gitconfig`,
 `~/.ssh` and own `gh` login are never touched.
 
-Every git and `gh` call mints a fresh token, which costs one API round
-trip. There is nothing to renew.
-
-Owner names match case-sensitively. A remote's owner must match the
-owner's login on GitHub exactly.
+The tokens expire on the date you set in step 01. `--check` warns two
+weeks ahead. Replace a token by creating a new one, deleting the old
+file and rerunning the installer.
 
 ## Why two startup files
 
@@ -156,18 +152,15 @@ the source line can undo the unset.
 
 ## Who the commits belong to
 
-Commit author and committer come from `user.name` and `user.email`,
-set by the included `~/.gitconfig`. Commits the agent makes are still
-authored by `alice` and signed with your key. The App identity applies
-to the transport and the API. GitHub records the push, the branch
-creation and the PR as `alice-agent[bot]`. The audit log and the PR
-Approve button use that identity.
+Everything the agent does is recorded as you: commits, pushes, PRs,
+comments and reviews. Commit author and committer come from
+`user.name` and `user.email` in the included `~/.gitconfig`, and
+commits stay signed with your key.
 
-Alternative, not recommended: set `user.email` in the agent's gitconfig
-to `<APP_ID>+alice-agent[bot]@users.noreply.github.com`, so commits show
-the bot. Your GPG signature then no longer matches the committer email.
-GitHub marks the commits Unverified unless you add that email as a UID
-on your key.
+Because its approvals would count as yours, the `gh` shim refuses
+`gh pr review --approve` and API calls that approve. Comment reviews
+still work. This is a speed bump, not a boundary: an agent that called
+the real `gh` directly could approve.
 
 ## Checks
 
@@ -182,16 +175,16 @@ them in a CLI session and in a Desktop session, inside a checkout of
 | Shim used | `type gh` | `gh is a shell function` |
 | Fetch | `git ls-remote --heads origin stage \| head -1` | a sha |
 | Transport | `GIT_TRACE=1 git ls-remote origin HEAD 2>&1 \| grep -m1 -o 'https://github.com[^ ]*'` | an https URL |
-| App identity | `gh api /installation/repositories --jq .total_count` | a number |
-| Admin blocked | `gh api -X PUT repos/ExampleOrg/repo/branches/stage/protection 2>&1 \| head -1` | 403 |
-| Repo create blocked | `gh repo create alice/zz-test --private 2>&1 \| head -1` | an error |
+| Token used | `gh api user --jq .login` | your login |
+| Admin blocked | `gh api repos/ExampleOrg/repo/hooks 2>&1 \| grep -o 'HTTP 403'` | `HTTP 403` |
+| Approval blocked | `gh pr review 1 --approve` | refused by the shim |
 | Feature push | `git push origin HEAD:refs/heads/zz-agent-test && git push origin --delete zz-agent-test` | both succeed |
 | PR | `gh pr list --limit 1` | works |
 | Personal owner | `git ls-remote git@github.com:alice/<repo>.git HEAD` | a sha |
-| Workflow file | push a branch that touches `.github/workflows/x.yml` | rejected: the App lacks Workflows |
+| Workflow file | push a branch that touches `.github/workflows/x.yml` | rejected: the token lacks Workflows |
 
-The App identity check works because `/installation/repositories`
-answers only for an App installation token.
+The admin check reads a repo's webhooks, which needs Administration.
+It changes nothing even if the token were wrongly allowed.
 
 In your own terminal, in the same checkout: `git fetch` still uses SSH.
 `gh auth status` still shows your own login, unchanged.
@@ -201,8 +194,10 @@ In your own terminal, in the same checkout: `git fetch` still uses SSH.
 If you finished [03](03-ssh-key-to-password-manager.md) and
 [04](04-claude-code-sandbox.md), roll those back first, or the agent has
 no GitHub access at all. Then delete the source line from both startup
-files. To remove the files too, keep the private key:
+files. To remove the files and tokens too:
 
 ```bash
-rm -r ~/.config/agent-gh ~/.config/agent-git/gitconfig ~/.config/agent-git/env.sh ~/.config/agent-git/bin
+rm -r ~/.config/agent-gh ~/.config/agent-git
 ```
+
+Revoke the tokens on GitHub as in [step 01's rollback](01-github.md#rollback).

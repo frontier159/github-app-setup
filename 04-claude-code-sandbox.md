@@ -4,7 +4,7 @@
 |---|---|
 | Required | recommended |
 | Depends on | [step 02](02-agent-identity.md) |
-| If you skip it: security | Nothing OS-enforced stops the agent reading files or reaching agent sockets. [Step 02](02-agent-identity.md) is the only thing routing it to the App, and an env var can be unset. |
+| If you skip it: security | Nothing OS-enforced stops the agent reading files or reaching agent sockets. [Step 02](02-agent-identity.md) is the only thing routing it to its tokens, and an env var can be unset. |
 | If you skip it: operations | Nothing changes. |
 | If you skip it: change elsewhere | None, but [03](03-ssh-key-to-password-manager.md) becomes the main barrier. |
 
@@ -25,7 +25,7 @@ bundled in Desktop. The [checks](#checks) confirm it. It is off by default.
 Two consequences matter here. The Bitwarden agent socket is unreachable
 from the agent's processes. SSH git remotes fail inside the sandbox,
 because unix sockets and `~/.ssh` are denied. Both force the agent onto
-the HTTPS App path from [step 02](02-agent-identity.md).
+the HTTPS token path from [step 02](02-agent-identity.md).
 
 ## Settings
 
@@ -39,8 +39,8 @@ Notes:
   (`cat`, `head`, `sed`) by pattern. `filesystem.denyRead` covers every
   process, including `grep -r` and scripts. Keep both.
 - Do not deny `~/.gitconfig`; the agent's config includes it.
-- `~/.config/agent-git/app.pem` stays readable on purpose. It is the
-  agent's credential.
+- `~/.config/agent-git/tokens/` stays readable on purpose. It holds
+  the agent's credentials.
 - `allowedDomains` lists GitHub only. Other hosts prompt on first use;
   approve the registries and RPC endpoints your repos reach.
 - `allowUnixSockets` lists only the GPG agent socket. The agent signs
@@ -62,8 +62,8 @@ these.
 
 - **Keychain.** The sandbox allows the macOS keychain service, so
   `/usr/bin/security` can likely read your `gh` token without a prompt.
-  The deny rules are speed bumps. [Step 01](01-github.md#optional-restrict-your-own-gh-login) explains how to
-  keep your own `gh` login weak if you want that bounded.
+  The deny rules are speed bumps. [Step 01](01-github.md#restrict-your-own-gh-login) makes that login a
+  restricted token, so reading it gains the agent nothing.
 - **Desktop.** If Desktop reads `~/.ssh` while the CLI cannot, Desktop
   is not applying the sandbox. [Steps 02](02-agent-identity.md) and [03](03-ssh-key-to-password-manager.md) still hold. Track
   anthropics/claude-code#98443.
@@ -77,8 +77,8 @@ each line and report the result:
 ls ~/.ssh                                    # permission denied
 cat ~/.config/gh/hosts.yml                   # denied
 ssh -T git@github.com                        # denied or fails to connect
-git -C ~/git/<repo> ls-remote --heads origin stage | head -1   # works (HTTPS App)
-gh api /installation/repositories --jq .total_count             # a number
+git -C ~/git/<repo> ls-remote --heads origin stage | head -1   # works (HTTPS, agent token)
+gh api user --jq .login                                         # your login, via the agent token
 security find-generic-password -s gh:github.com -w >/dev/null && echo READABLE
 git -C ~/git/<repo> commit --allow-empty -S -m "sandbox signing test" && git -C ~/git/<repo> log --show-signature -1
 <your repo's normal build or check command>

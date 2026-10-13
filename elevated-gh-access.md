@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Required | optional |
-| Depends on | [restricting your own `gh` login](01-github.md#optional-restrict-your-own-gh-login) |
+| Depends on | [restricting your own `gh` login](01-github.md#restrict-your-own-gh-login) |
 | If you skip it: security | Nothing changes. Admin work stays in the browser. |
 | If you skip it: operations | Admin commands such as `gh repo create` don't work from your terminal. |
 | If you skip it: change elsewhere | nothing |
