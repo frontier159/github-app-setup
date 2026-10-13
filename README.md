@@ -22,7 +22,8 @@ Then:
    The installer runs from the repo root. Read `install.sh` before you
    run it: it edits your shell startup files.
 2. Do [step 01](01-github.md) in the browser. You end with an App ID
-   and the App's private key at `~/.config/agent-git/app.pem`.
+   and the App's private key at `~/.config/agent-git/app.pem`. Check it
+   with `./check-github.sh --app-id <APP_ID> --repo <owner/repo>`.
 3. Run the installer, as [step 02](02-agent-identity.md#run-the-installer)
    describes:
 

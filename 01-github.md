@@ -189,6 +189,26 @@ GitHub.
 
 ## Checks
 
+Run the check script from the repo root. It uses the App's own key,
+changes nothing and prints no secret:
+
+```bash
+./check-github.sh --app-id <APP_ID> --repo ExampleOrg/repo
+```
+
+It checks the private key's mode and format, and for each
+installation:
+
+- that it covers only selected repositories;
+- that its permissions match [Register the App](#register-the-app);
+- that a token can be minted;
+- that an admin-only call is refused.
+
+For each `--repo` it checks the default branch's rules against
+[Rulesets](#rulesets), and that a tag ruleset restricts tag creation.
+Repeat `--repo` for each repo you protect. It exits non-zero on any
+problem.
+
 After [step 02](02-agent-identity.md):
 
 - ExampleOrg → Settings → Installed GitHub Apps → alice-agent: selected
