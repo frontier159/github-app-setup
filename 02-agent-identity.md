@@ -15,6 +15,37 @@ It points `gh` at a config dir with no stored login and puts a `gh`
 shim first on `PATH`. It unsets `SSH_AUTH_SOCK`. Your own shells never
 set `CLAUDECODE`, so nothing changes for you.
 
+## Routing, not a boundary
+
+The agent cannot stop Claude Code setting `CLAUDECODE=1` when a shell
+starts. Inside its own commands it can still step around the routing:
+`unset CLAUDECODE` before starting a new shell, run git with
+`env -u GIT_CONFIG_GLOBAL`, or call the real `gh` by its full path, such
+as `/opt/homebrew/bin/gh`. An agent that hits a refusal may try exactly
+this.
+
+So this step makes the App the agent's default path. It does not keep
+the agent on it. What a bypass reaches depends on the later steps:
+
+| Done | What the agent reaches by stepping around the routing |
+|---|---|
+| Only 01 and 02 | your SSH key file and your own `gh` login: everything you can do |
+| Plus [03](03-ssh-key-to-password-manager.md) | no key file; your password manager prompts for each use, so you see it |
+| Plus [04](04-claude-code-sandbox.md) | reading `~/.ssh` and opening agent sockets fail, so SSH as you fails |
+| Plus a [restricted `gh` login](01-github.md#optional-restrict-your-own-gh-login) | your keychain token, limited to ordinary PR and issue work |
+
+Do 03, 04 and the `gh` restriction if you want a bypass to gain
+nothing. These make one less likely, but none is a boundary:
+
+- **Auto mode's classifier** tends to block deliberate workarounds of a
+  refusal.
+- **Deny rules** such as `Bash(unset CLAUDECODE*)`, `Bash(env -u *)`
+  and `Bash(/opt/homebrew/bin/gh *)` catch the plain forms, not ones
+  inside a script.
+- **An instruction in your `CLAUDE.md`**, such as "if GitHub refuses a
+  call, stop and report it; never switch credentials or routing",
+  steers a well-behaved agent. A prompt-injected one may ignore it.
+
 ## Before you run it
 
 - Steps in [01](01-github.md) are done: the App exists, is installed on
