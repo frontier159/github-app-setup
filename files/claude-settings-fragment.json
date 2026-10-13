@@ -4,7 +4,9 @@
       "Read(~/.ssh/**)",
       "Read(~/.config/gh/**)",
       "Bash(security *)",
-      "Bash(git credential-osxkeychain *)"
+      "Bash(git credential-osxkeychain *)",
+      "Bash(gh-admin *)",
+      "Bash(bw *)"
     ]
   },
   "sandbox": {
@@ -12,11 +14,21 @@
     "failIfUnavailable": true,
     "allowUnsandboxedCommands": false,
     "filesystem": {
-      "denyRead": ["~/.ssh", "~/.config/gh", "~/Library/Containers/com.bitwarden.desktop"]
+      "denyRead": [
+        "~/.ssh",
+        "~/.config/gh",
+        "~/Library/Containers/com.bitwarden.desktop",
+        "~/Library/Application Support/Bitwarden CLI"
+      ]
     },
     "network": {
-      "allowedDomains": ["github.com", "api.github.com"],
-      "allowUnixSockets": ["~/.gnupg/S.gpg-agent"],
+      "allowedDomains": [
+        "github.com",
+        "api.github.com"
+      ],
+      "allowUnixSockets": [
+        "~/.gnupg/S.gpg-agent"
+      ],
       "allowLocalBinding": true
     }
   }

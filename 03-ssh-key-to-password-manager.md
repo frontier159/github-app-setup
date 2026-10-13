@@ -15,7 +15,9 @@ shells have no agent socket ([step 02](02-agent-identity.md#what-it-writes)). Af
 
 Prerequisite: [step 02 checks](02-agent-identity.md#checks) pass. The agent must already be on HTTPS.
 
-Only Bitwarden's flow was walked through. Any password manager that
+Only Bitwarden's flow was walked through. Bitwarden's SSH agent is
+part of its [desktop app](https://bitwarden.com/download/), with its
+own [setup guide](https://bitwarden.com/help/ssh-agent/). Any password manager that
 runs an SSH agent gives the same property: key in the vault, socket on
 disk, prompt per use. Substitute its socket path in [Point your shells at it](#point-your-shells-at-it). If the agent
 lives in an app container, add that container to `denyRead` in [step 04](04-claude-code-sandbox.md#settings).

@@ -8,9 +8,10 @@ on macOS is the worked example.
 
 You need:
 
-- macOS, with zsh or bash as your login shell.
+- macOS, with zsh as your login shell. bash is supported by the
+  installer but not yet confirmed to route; see [step 02](02-agent-identity.md#why-two-startup-files).
 - git 2.32 or newer, and the `gh` CLI on your `PATH`.
-- Go, to install the credential helper, or its release binary.
+- `jq`, which ships with macOS 15 and later.
 - A password manager with an SSH agent, for [step 03](03-ssh-key-to-password-manager.md).
 - Owner rights on each GitHub org you want the agent in, or an owner
   who will approve the App.
@@ -21,7 +22,8 @@ Then:
    The installer runs from the repo root. Read `install.sh` before you
    run it: it edits your shell startup files.
 2. Do [step 01](01-github.md) in the browser. You end with an App ID
-   and the App's private key at `~/.config/agent-git/app.pem`.
+   and the App's private key at `~/.config/agent-git/app.pem`. Check it
+   with `./check-github.sh --app-id <APP_ID> --repo <owner/repo>`.
 3. Run the installer, as [step 02](02-agent-identity.md#run-the-installer)
    describes:
 
@@ -225,7 +227,7 @@ counterpart.
 | Concern | macOS (this guide) | Linux |
 |---|---|---|
 | Agent surfaces | Claude Code CLI and Desktop | CLI only; Claude Desktop does not ship for Linux |
-| Installer and shell | `install.sh` supports zsh and bash login shells | The installer and the `gh` shim are bash 3.2 and the env file is POSIX, so both shells work. The installer refuses Linux for now: it reads file modes with macOS `stat -f` and settings with `plutil` |
+| Installer and shell | `install.sh` supports zsh and bash login shells | The installer and the `gh` shim are bash 3.2 and the env file is POSIX, so both shells work. The installer refuses Linux for now: it reads file modes with macOS `stat -f` |
 | Sandbox | Seatbelt, built in | bubblewrap + socat; install them first. Same settings keys |
 | Password-manager agent | Bitwarden or 1Password sockets as in [03](03-ssh-key-to-password-manager.md) | Socket paths differ by package (deb, snap, flatpak); check the vendor docs. 1Password: `~/.1password/agent.sock`. No Secretive; gnome-keyring or KeePassXC agents also work |
 | Break-glass backup | `hdiutil` encrypted image | LUKS image, or `tar -C ~ -c .ssh \| gpg -c > breakglass-ssh.tar.gpg` |
@@ -246,6 +248,8 @@ Steps [01](01-github.md) and [02](02-agent-identity.md) apart from the shell lin
   writes the rest; [step 02](02-agent-identity.md#what-it-writes) lists
   each file. Outside those directories it adds one source line to two
   startup files and touches nothing else of yours.
-- [`files/`](files/) holds the `gh` shim and the Claude Code settings
+- [Elevated `gh` access](elevated-gh-access.md) is optional: `gh-admin`
+  runs one admin command with a token kept in Bitwarden.
+- [`files/`](files/) holds the `gh` shim, `gh-admin`, and the Claude Code settings
   fragment for [step 04](04-claude-code-sandbox.md#settings).
 - Commands work in zsh and bash. No `sudo`.

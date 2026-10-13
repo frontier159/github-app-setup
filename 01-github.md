@@ -34,7 +34,9 @@ gh auth status
   agent could reach it through the keychain.
 
 To replace it, create a fine-grained PAT that cannot administer
-anything. Admin work then goes in the browser.
+anything. Admin work then goes in the browser, or through
+[`gh-admin`](elevated-gh-access.md), which keeps a stronger token
+locked in Bitwarden and uses it for one command at a time.
 
 GitHub → **Settings → Developer settings → Personal access tokens →
 Fine-grained tokens → Generate new token**. Pick the resource owner you
@@ -77,15 +79,20 @@ Repository permissions (everything else stays *No access*):
 | Contents | Read and write | clone, fetch, push branches |
 | Pull requests | Read and write | open, update, comment on PRs |
 | Issues | Read and write | issues, labels |
-| Commit statuses | Read and write | status checks on pushes |
 | Actions | Read | inspect runs and logs |
 | Metadata | Read | mandatory, auto-selected |
 | Checks | Read | read check runs |
 
-Deliberately absent: Administration, Workflows, Secrets, Variables,
-Environments, Deployments, Webhooks, Pages, Security events. Without
-**Workflows** the App cannot push a commit that touches
-`.github/workflows/*`. Workflow changes go through you.
+Deliberately absent: Administration, Workflows, Commit statuses,
+Secrets, Variables, Environments, Deployments, Webhooks, Pages,
+Security events.
+
+- **Without Workflows** the App cannot push a commit that touches
+  `.github/workflows/*`. CI still runs scripts the agent can edit, such
+  as `package.json` or a `Makefile`, so a workflow that holds secrets
+  should not run on agent branches without review.
+- **Without Commit statuses** the App cannot mark a required check as
+  passed. With write access it could post `success` for any check.
 
 Organization permissions: none. Account permissions: none.
 
@@ -114,6 +121,12 @@ repositories** → choose the repos the agent works on → Install.
 Repeat for every owner: `ExampleOrg`, `alice`, others. Test one push on
 your personal account before relying on it.
 
+If an org you belong to is missing from the list, the App was created
+as **Only on this account**. A private App installs only on its owner.
+Open the App's settings → **Advanced** → **Make public**, then return to
+**Install App**. Public only means other people could install your App
+on their own repos; it gives nobody access to yours.
+
 Installing on an org needs an **org owner**. If you own ExampleOrg, you
 approve it yourself, once, and choose the repos. If not, the install
 page submits a request. An owner approves it under the org's Settings →
@@ -125,7 +138,7 @@ do it.
 
 Each owner gets its own installation ID. You do not need to record
 them: the installer in [step 02](02-agent-identity.md#run-the-installer)
-asks the App for its installations, writes one helper line per owner,
+asks GitHub for the App's installations, writes one helper line per owner,
 and tests a token for each.
 
 ## Rulesets
@@ -148,13 +161,23 @@ Rules to tick:
 
 - Restrict deletions
 - Block force pushes
-- Require a pull request before merging (required approvals: 1; dismiss
-  stale approvals on push)
-- Require status checks to pass (pick the CI jobs that already run)
+- Require a pull request before merging, with required approvals: 1,
+  dismiss stale approvals on push, and **require approval of the most
+  recent reviewable push**. Without the last option, an approval given
+  before the agent's final push still counts.
+- Require review from Code Owners, if a `CODEOWNERS` file names a team
+  of humans. Approvals from Apps count as reviews, so this keeps a
+  human in the loop.
+- Require status checks to pass. Pick the CI jobs that already run,
+  and set each one's source to **GitHub Actions**, so no other App can
+  report it.
 - Require linear history, if the team rebases (skip otherwise)
 
-If you release by tag push, add a tag ruleset on `v*` with Restrict
-creations, bypassable only by a team of humans.
+Add a **tag ruleset** too. The App's Contents permission includes
+creating and moving tags, so without one the agent can cut a release
+in any repo that builds from tag pushes. Target `v*`, or your release
+tag pattern. Tick Restrict creations, Restrict updates and Restrict
+deletions, and let only a team of humans bypass it.
 
 Org-level alternative: ExampleOrg → Settings → Repository → Rulesets
 applies one ruleset across all repos. Prefer that once it works on one
@@ -165,6 +188,26 @@ for emergencies. Until then, you and the agent are the same actor to
 GitHub.
 
 ## Checks
+
+Run the check script from the repo root. It uses the App's own key,
+changes nothing and prints no secret:
+
+```bash
+./check-github.sh --app-id <APP_ID> --repo ExampleOrg/repo
+```
+
+It checks the private key's mode and format, and for each
+installation:
+
+- that it covers only selected repositories;
+- that its permissions match [Register the App](#register-the-app);
+- that a token can be minted;
+- that an admin-only call is refused.
+
+For each `--repo` it checks the default branch's rules against
+[Rulesets](#rulesets), and that a tag ruleset restricts tag creation.
+Repeat `--repo` for each repo you protect. It exits non-zero on any
+problem.
 
 After [step 02](02-agent-identity.md):
 
