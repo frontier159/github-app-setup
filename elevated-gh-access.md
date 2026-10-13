@@ -57,7 +57,8 @@ process list. The token exists only in the `gh` process's environment.
    bw login
    ```
 
-   The CLI is Bitwarden's own, separate from the desktop app. It keeps
+   The CLI is Bitwarden's own, separate from the desktop app; its
+   [docs](https://bitwarden.com/help/cli/) list other ways to install it. It keeps
    an encrypted copy of your vault and needs your master password to
    read it.
 4. **Install the wrapper** somewhere on your `PATH`:

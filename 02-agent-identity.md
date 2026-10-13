@@ -91,12 +91,21 @@ owner's login on GitHub exactly.
 
 ## Why two startup files
 
-Claude Code's Bash runs a login shell. Any login file that prepends
-`PATH` after `~/.zshenv` would put the real `gh` ahead of the shim.
+Claude Code runs each Bash command as `zsh -c`, or your shell's
+equivalent, after sourcing a snapshot of your environment. zsh reads
+`~/.zshenv` for every shell. On the machine this was written on, zsh
+also reported its login option as on, so `~/.zprofile` ran afterwards.
+Any login file that prepends `PATH` after `~/.zshenv` would then put
+the real `gh` ahead of the shim.
 Examples are macOS `path_helper` in `/etc/zprofile`, Homebrew's
 `brew shellenv`, mise, asdf and nix. The source line at the end of the
 login file puts the shim back in front. The shim finds the real `gh`
 wherever it lives, so no path to `gh` is hardcoded.
+
+bash is less certain. `bash -c` reads neither `~/.bash_profile` nor
+`~/.bashrc`, so the routing may not load at all. After installing, run
+the shim check under [Checks](#checks) in an agent session. If `gh`
+is not the shim, this setup does not yet route your shell.
 
 If you later add lines below the source line, `--check` reports it and
 a rerun moves the line back to the end.

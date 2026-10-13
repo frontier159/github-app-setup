@@ -79,15 +79,20 @@ Repository permissions (everything else stays *No access*):
 | Contents | Read and write | clone, fetch, push branches |
 | Pull requests | Read and write | open, update, comment on PRs |
 | Issues | Read and write | issues, labels |
-| Commit statuses | Read and write | status checks on pushes |
 | Actions | Read | inspect runs and logs |
 | Metadata | Read | mandatory, auto-selected |
 | Checks | Read | read check runs |
 
-Deliberately absent: Administration, Workflows, Secrets, Variables,
-Environments, Deployments, Webhooks, Pages, Security events. Without
-**Workflows** the App cannot push a commit that touches
-`.github/workflows/*`. Workflow changes go through you.
+Deliberately absent: Administration, Workflows, Commit statuses,
+Secrets, Variables, Environments, Deployments, Webhooks, Pages,
+Security events.
+
+- **Without Workflows** the App cannot push a commit that touches
+  `.github/workflows/*`. CI still runs scripts the agent can edit, such
+  as `package.json` or a `Makefile`, so a workflow that holds secrets
+  should not run on agent branches without review.
+- **Without Commit statuses** the App cannot mark a required check as
+  passed. With write access it could post `success` for any check.
 
 Organization permissions: none. Account permissions: none.
 
@@ -115,6 +120,12 @@ repositories** → choose the repos the agent works on → Install.
 
 Repeat for every owner: `ExampleOrg`, `alice`, others. Test one push on
 your personal account before relying on it.
+
+If an org you belong to is missing from the list, the App was created
+as **Only on this account**. A private App installs only on its owner.
+Open the App's settings → **Advanced** → **Make public**, then return to
+**Install App**. Public only means other people could install your App
+on their own repos; it gives nobody access to yours.
 
 Installing on an org needs an **org owner**. If you own ExampleOrg, you
 approve it yourself, once, and choose the repos. If not, the install
@@ -150,13 +161,23 @@ Rules to tick:
 
 - Restrict deletions
 - Block force pushes
-- Require a pull request before merging (required approvals: 1; dismiss
-  stale approvals on push)
-- Require status checks to pass (pick the CI jobs that already run)
+- Require a pull request before merging, with required approvals: 1,
+  dismiss stale approvals on push, and **require approval of the most
+  recent reviewable push**. Without the last option, an approval given
+  before the agent's final push still counts.
+- Require review from Code Owners, if a `CODEOWNERS` file names a team
+  of humans. Approvals from Apps count as reviews, so this keeps a
+  human in the loop.
+- Require status checks to pass. Pick the CI jobs that already run,
+  and set each one's source to **GitHub Actions**, so no other App can
+  report it.
 - Require linear history, if the team rebases (skip otherwise)
 
-If you release by tag push, add a tag ruleset on `v*` with Restrict
-creations, bypassable only by a team of humans.
+Add a **tag ruleset** too. The App's Contents permission includes
+creating and moving tags, so without one the agent can cut a release
+in any repo that builds from tag pushes. Target `v*`, or your release
+tag pattern. Tick Restrict creations, Restrict updates and Restrict
+deletions, and let only a team of humans bypass it.
 
 Org-level alternative: ExampleOrg → Settings → Repository → Rulesets
 applies one ruleset across all repos. Prefer that once it works on one

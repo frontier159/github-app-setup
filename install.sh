@@ -30,7 +30,9 @@ while [ $# -gt 0 ]; do
 done
 if [ $mode = install ]; then
   case $app_id in ''|*[!0-9]*) echo "install: --app-id must be the numeric App ID from step 01" >&2; usage ;; esac
-  [ -n "$default_owner" ] || { echo "install: --default-owner is required" >&2; usage; }
+  case $default_owner in
+    ''|-*|*-|*[!A-Za-z0-9-]*) echo "install: --default-owner must be a GitHub login: letters, digits and inner hyphens" >&2; usage ;;
+  esac
 fi
 
 # The startup files the agent's login shell reads, last line first.
