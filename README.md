@@ -195,6 +195,47 @@ with its own checks.
 
 Roll back in reverse step order. Each step ends with its rollback.
 
+## Known issues
+
+### You can approve your own agent's PRs
+
+When the agent opens a PR, its author is the App's bot account, such
+as `alice-agent[bot]`. GitHub counts your approval as a review from
+someone else, because it cannot tell that the bot works for you. On a
+repo that needs one approval, you and your agent can merge with no
+second person involved.
+
+On your own repos this is the intended check: you are the only human,
+and your review is the gate on the agent's work. On team repos it
+undoes two-person review.
+
+Two GitHub settings look relevant but do not help:
+
+- **Require approval of the most recent reviewable push** only needs
+  someone other than the last pusher. The bot pushed, so your approval
+  counts.
+- **Require an additional approval for unattributed Copilot pull
+  requests** applies only to GitHub's own Copilot, not to other Apps.
+
+Options, strongest first:
+
+1. **Stop the agent opening PRs.** Set the App's Pull requests
+   permission to read. The agent still pushes branches, and you open
+   the PR. You are then its author, and GitHub does not let an author
+   approve their own PR. The agent can no longer open PRs, comment on
+   them or edit their descriptions.
+2. **Require two approvals on team repos.** Your approval counts as
+   one, so a second person still has to review. Every PR then needs two
+   reviewers, including ones a human wrote.
+3. **Add a required check.** A GitHub Actions workflow fails any PR
+   authored by `<handle>-agent[bot]` unless someone other than
+   `<handle>` approved it. The App naming convention makes the operator
+   readable from the bot's name. This only binds if the check is
+   required and its source is set to GitHub Actions.
+
+Not yet decided. Until then, treat a PR your agent opened as your own
+when you review it on a team repo.
+
 ## Other agents (Codex CLI and Desktop, others)
 
 Not done here. These are notes for whoever extends this. The design

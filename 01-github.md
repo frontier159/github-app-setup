@@ -147,6 +147,10 @@ Server-side and identity-agnostic. This is the only guard on protected
 branches; local hooks are bypassed by `--no-verify` and by repo-local
 `core.hooksPath`.
 
+On team repos, read [You can approve your own agent's
+PRs](README.md#you-can-approve-your-own-agents-prs) before you set the
+number of required approvals.
+
 Per repo: **Settings → Rules → Rulesets → New ruleset → New branch
 ruleset.**
 
