@@ -177,6 +177,9 @@ export GIT_CONFIG_GLOBAL="\$HOME/.config/agent-git/gitconfig"
 export GH_CONFIG_DIR="\$HOME/.config/agent-gh"
 export AGENT_GH_DEFAULT_OWNER=$default_owner
 export PATH="\$HOME/.config/agent-gh/bin:\$PATH"
+# Claude Code resets PATH from its shell snapshot after startup files run;
+# a function survives that, so plain gh still reaches the shim.
+gh() { "\$HOME/.config/agent-gh/bin/gh" "\$@"; }
 unset SSH_AUTH_SOCK
 ENV
 chmod 600 "$AG/env.sh"

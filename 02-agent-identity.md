@@ -11,8 +11,9 @@
 Mechanism: Claude Code sets `CLAUDECODE=1` in every Bash shell, in the
 CLI and in Desktop. Two source lines load an env file only when that
 marker is set. The env file points git at an agent-only global config.
-It points `gh` at a config dir with no stored login and puts a `gh`
-shim first on `PATH`. It unsets `SSH_AUTH_SOCK`. Your own shells never
+It points `gh` at a config dir with no stored login, and defines a
+`gh` shell function that calls the `gh` shim. It unsets
+`SSH_AUTH_SOCK`. Your own shells never
 set `CLAUDECODE`, so nothing changes for you.
 
 ## Routing, not a boundary
@@ -105,7 +106,7 @@ and [step 04](04-claude-code-sandbox.md) look done.
 | Path | What it is |
 |---|---|
 | `~/.config/agent-git/gitconfig` | The agent's global gitconfig. It includes your `~/.gitconfig`, clears inherited credential helpers, adds one App helper line per owner, and rewrites SSH remotes to HTTPS |
-| `~/.config/agent-git/env.sh` | Sets `GIT_CONFIG_GLOBAL`, `GH_CONFIG_DIR` and the default owner, puts the `gh` shim first on `PATH`, unsets `SSH_AUTH_SOCK` |
+| `~/.config/agent-git/env.sh` | Sets `GIT_CONFIG_GLOBAL`, `GH_CONFIG_DIR` and the default owner, defines a `gh` function that calls the shim, unsets `SSH_AUTH_SOCK` |
 | `~/.config/agent-git/bin/git-credential-agent` | The [credential helper](#the-credential-helper), from `files/` |
 | `~/.config/agent-gh/bin/gh` | The [`gh` shim](files/gh). It finds the repo owner, gets that owner's token from git and exports it as `GH_TOKEN`, then runs the real `gh` |
 | the source line, at the end of two startup files | Loads `env.sh` only when `CLAUDECODE` is set |
@@ -123,20 +124,28 @@ owner's login on GitHub exactly.
 ## Why two startup files
 
 Claude Code runs each Bash command as `zsh -c`, or your shell's
-equivalent, after sourcing a snapshot of your environment. zsh reads
-`~/.zshenv` for every shell. On the machine this was written on, zsh
-also reported its login option as on, so `~/.zprofile` ran afterwards.
-Any login file that prepends `PATH` after `~/.zshenv` would then put
-the real `gh` ahead of the shim.
-Examples are macOS `path_helper` in `/etc/zprofile`, Homebrew's
-`brew shellenv`, mise, asdf and nix. The source line at the end of the
-login file puts the shim back in front. The shim finds the real `gh`
-wherever it lives, so no path to `gh` is hardcoded.
+equivalent. zsh reads `~/.zshenv` for every shell, and on the machine
+this was written on it also read `~/.zprofile`. Claude Code then
+sources a snapshot of your shell taken when the session started, and
+that snapshot sets `PATH` again. So a `PATH` entry from the env file
+does not survive, and `gh` would resolve to the real one.
+
+A shell function does survive, because the snapshot only replaces
+`PATH` and aliases. The env file defines `gh` as a function that calls
+the shim, so a plain `gh` command reaches the shim. The source line
+sits last in both files so that nothing after it redefines the
+routing. The shim finds the real `gh` wherever it lives, so no path to
+`gh` is hardcoded.
+
+A script that runs `gh` as a child process does not see the function.
+It gets the real `gh`, which finds the agent's empty config dir and
+reports no login. It fails closed: it never falls back to your own
+login.
 
 bash is less certain. `bash -c` reads neither `~/.bash_profile` nor
 `~/.bashrc`, so the routing may not load at all. After installing, run
 the shim check under [Checks](#checks) in an agent session. If `gh`
-is not the shim, this setup does not yet route your shell.
+is not a function there, this setup does not yet route your shell.
 
 If you later add lines below the source line, `--check` reports it and
 a rerun moves the line back to the end.
@@ -170,7 +179,7 @@ them in a CLI session and in a Desktop session, inside a checkout of
 | Check | Command | Expect |
 |---|---|---|
 | Env | `echo $GIT_CONFIG_GLOBAL $GH_CONFIG_DIR ${SSH_AUTH_SOCK:-nosock}` | agent paths, `nosock` |
-| Shim first | `command -v gh` | `~/.config/agent-gh/bin/gh` |
+| Shim used | `type gh` | `gh is a shell function` |
 | Fetch | `git ls-remote --heads origin stage \| head -1` | a sha |
 | Transport | `GIT_TRACE=1 git ls-remote origin HEAD 2>&1 \| grep -m1 -o 'https://github.com[^ ]*'` | an https URL |
 | App identity | `gh api /installation/repositories --jq .total_count` | a number |
