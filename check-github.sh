@@ -62,7 +62,14 @@ while read -r owner id selection; do
   extra=$(printf '%s' "$installs" | "$JQ" -r --arg id "$id" --argjson want "$EXPECTED" \
     '.[] | select((.id|tostring) == $id) | .permissions | to_entries[] | select($want[.key] != .value) | "\(.key)=\(.value)"')
   if [ -z "$extra" ]; then ok "permissions match step 01"
-  else for e in $extra; do fail "permission $e is not in step 01; remove it in the App's Permissions & events"; done; fi
+  else
+    for e in $extra; do
+      case $e in
+        *=read) warn "permission $e is not in step 01; read-only, but remove it if the agent does not need it" ;;
+        *) fail "permission $e is not in step 01; remove it in the App's Permissions & events" ;;
+      esac
+    done
+  fi
   token=$(token_for "$owner" "$id")
   if [ -z "$token" ]; then fail "no token minted"; continue; fi
   ok "token minted"
