@@ -246,6 +246,8 @@ Steps [01](01-github.md) and [02](02-agent-identity.md) apart from the shell lin
   writes the rest; [step 02](02-agent-identity.md#what-it-writes) lists
   each file. Outside those directories it adds one source line to two
   startup files and touches nothing else of yours.
-- [`files/`](files/) holds the `gh` shim and the Claude Code settings
+- [Elevated `gh` access](elevated-gh-access.md) is optional: `gh-admin`
+  runs one admin command with a token kept in Bitwarden.
+- [`files/`](files/) holds the `gh` shim, `gh-admin`, and the Claude Code settings
   fragment for [step 04](04-claude-code-sandbox.md#settings).
 - Commands work in zsh and bash. No `sudo`.

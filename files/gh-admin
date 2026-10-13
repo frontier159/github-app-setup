@@ -1,0 +1,39 @@
+#!/bin/bash
+# Runs one gh command with an elevated GitHub token held in Bitwarden. Bash 3.2 compatible.
+#
+#   gh-admin <gh arguments>
+#
+# Prompts for the Bitwarden master password, reads the password field of the vault item
+# named gh-admin, runs gh with it, then locks the CLI vault again however gh exits.
+set -euo pipefail
+
+ITEM=gh-admin
+
+die() { echo "gh-admin: $*" >&2; exit 1; }
+
+[ -z "${CLAUDECODE:-}" ] || die "refusing to run in an agent shell"
+[ -t 0 ] || die "needs a terminal for the master password prompt"
+command -v bw >/dev/null || die "Bitwarden CLI not found: brew install bitwarden-cli, then bw login"
+command -v gh >/dev/null || die "gh not found on PATH"
+
+cfg=$(mktemp -d)
+cleanup() { stty echo </dev/tty 2>/dev/null || true; bw lock >/dev/null 2>&1 || true; rm -rf "$cfg"; }
+trap cleanup EXIT
+
+# Echo goes off before the prompt appears, so nothing typed early is shown.
+stty -echo </dev/tty
+printf 'Bitwarden master password: ' >&2
+read -r password </dev/tty
+stty echo </dev/tty
+echo >&2
+# The password and session key travel in the environment, never in argv.
+session=$(BW_PASSWORD=$password bw unlock --passwordenv BW_PASSWORD --raw) || die "vault not unlocked"
+unset password
+token=$(BW_SESSION=$session bw get password "$ITEM") \
+  || die "no single vault item named $ITEM; create it, or run bw sync"
+unset session
+
+# An empty config dir keeps this command away from your stored gh login.
+status=0
+GH_TOKEN=$token GH_CONFIG_DIR=$cfg gh "$@" || status=$?
+exit $status

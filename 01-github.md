@@ -34,7 +34,9 @@ gh auth status
   agent could reach it through the keychain.
 
 To replace it, create a fine-grained PAT that cannot administer
-anything. Admin work then goes in the browser.
+anything. Admin work then goes in the browser, or through
+[`gh-admin`](elevated-gh-access.md), which keeps a stronger token
+locked in Bitwarden and uses it for one command at a time.
 
 GitHub → **Settings → Developer settings → Personal access tokens →
 Fine-grained tokens → Generate new token**. Pick the resource owner you
