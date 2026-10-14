@@ -11,7 +11,10 @@ AH="$HOME/.config/agent-gh"
 TOKENS="$AG/tokens"
 HELPER="$AG/bin/git-credential-agent"
 HERE=$(cd "$(dirname "$0")" && pwd)
-SOURCE_LINE='[ -n "$CLAUDECODE" ] && [ -r "$HOME/.config/agent-git/env.sh" ] && . "$HOME/.config/agent-git/env.sh"'
+SOURCE_LINE='if [ -n "${CLAUDECODE:-}" ] && [ -r "$HOME/.config/agent-git/env.sh" ]; then . "$HOME/.config/agent-git/env.sh"; fi'
+# v0.1.0 wrote this form. It returns 1 when CLAUDECODE is unset, so the rewrite removes it.
+OLD_SOURCE_LINE='[ -n "$CLAUDECODE" ] && [ -r "$HOME/.config/agent-git/env.sh" ] && . "$HOME/.config/agent-git/env.sh"'
+PROFILE_LINE='[ -r "$HOME/.profile" ] && . "$HOME/.profile"'
 
 usage() { sed -n '5,6p' "$0" | sed 's/^# *//' >&2; exit 2; }
 problems=0
@@ -25,7 +28,7 @@ mode=install owners="" default_owner=""
 while [ $# -gt 0 ]; do
   case $1 in
     --owner) is_login "${2:-}" || { echo "install: --owner must be a GitHub login" >&2; usage; }; owners="$owners $2"; shift 2 ;;
-    --default-owner) default_owner=${2:-}; shift 2 ;;
+    --default-owner) is_login "${2:-}" || { echo "install: --default-owner must be a GitHub login" >&2; usage; }; default_owner=$2; shift 2 ;;
     --check) mode=check; shift ;;
     *) usage ;;
   esac
@@ -45,7 +48,9 @@ startup_files() {
     bash) echo "$HOME/.bash_profile $HOME/.bashrc" ;;
   esac
 }
-last_line() { [ -f "$1" ] && grep -v '^[[:space:]]*$' "$1" | tail -1 || true; }
+last_line() { [ -f "$1" ] && grep -av '^[[:space:]]*$' "$1" | tail -1 || true; }
+# Login bash stops reading ~/.profile once ~/.bash_profile exists.
+new_bash_profile() { [ "$1" = "$HOME/.bash_profile" ] && [ ! -e "$1" ] && [ -f "$HOME/.profile" ]; }
 
 # ---- preflight -------------------------------------------------------------
 echo "Preflight"
@@ -64,15 +69,15 @@ for f in gh git-credential-agent; do
   [ -x "$HERE/files/$f" ] || problem "$HERE/files/$f missing or not executable; run from a full checkout"
 done
 if [ -f "$HOME/.gitconfig" ]; then
-  reverse=$(git config --file "$HOME/.gitconfig" --includes --get-regexp '^url\..*\.insteadof$' 2>/dev/null \
-            | grep -E '^url\.(git@github\.com:|ssh://git@github\.com/?)\.insteadof +https://github\.com' || true)
+  reverse=$(git config --file "$HOME/.gitconfig" --includes --get-regexp '^url\..*insteadof$' 2>/dev/null \
+            | grep -E '^url\.(git@github\.com:|ssh://git@github\.com)[^ ]*\.(push)?insteadof +https://github\.com' || true)
   [ -z "$reverse" ] && ok "no HTTPS-to-SSH rewrite in ~/.gitconfig" \
     || problem "~/.gitconfig rewrites GitHub HTTPS to SSH; remove it, the agent config cannot cancel it: $reverse"
 fi
 if [ $mode = install ]; then
   for o in $owners; do
     [ -s "$TOKENS/$o" ] && continue
-    [ -t 0 ] || problem "no token stored for $o, and no terminal to paste one into; run the installer in a terminal"
+    [ -r /dev/tty ] || problem "no token stored for $o, and no terminal to paste one into; run the installer in a terminal"
   done
 fi
 if [ $problems -gt 0 ]; then echo "Stopped: $problems problem(s) above. Nothing was changed." >&2; exit 1; fi
@@ -104,12 +109,13 @@ check_token() {
   else
     ok "$owner: token works as $login, no expiry"
   fi
-  repo=$(GH_TOKEN=$token GH_CONFIG_DIR=$cfg command gh api '/user/repos?per_page=100' \
-    --jq "[.[] | select(.owner.login | ascii_downcase == \"$(printf '%s' "$owner" | tr 'A-Z' 'a-z')\")][0].full_name // empty" 2>/dev/null || true)
+  repo=$(GH_TOKEN=$token GH_CONFIG_DIR=$cfg command gh api '/user/repos?per_page=100' --paginate \
+    --jq ".[] | select(.owner.login | ascii_downcase == \"$(printf '%s' "$owner" | tr 'A-Z' 'a-z')\") | .full_name" 2>/dev/null | head -1 || true)
   if [ -z "$repo" ]; then
     note "$owner: the token sees none of $owner's repos; check its resource owner and repository access"
   else
-    code=$(GH_TOKEN=$token GH_CONFIG_DIR=$cfg command gh api "repos/$repo/hooks" 2>&1 | grep -o 'HTTP [0-9]*' | head -1 || true)
+    # Deploy keys need Administration read; the token must have none.
+    code=$(GH_TOKEN=$token GH_CONFIG_DIR=$cfg command gh api "repos/$repo/keys" 2>&1 | grep -o 'HTTP [0-9]*' | head -1 || true)
     [ "$code" = "HTTP 403" ] && ok "$owner: admin-only call refused (403 on $repo)" \
       || problem "$owner: admin-only call on $repo gave '${code:-success}'; set Administration to No access"
   fi
@@ -125,6 +131,9 @@ verify() {
     [ "$(last_line "$f")" = "$SOURCE_LINE" ] && ok "$(basename "$f") ends with the source line" \
       || problem "$(basename "$f") does not end with the source line; rerun install"
   done
+  # A token your own login shell exports reaches agent shells until env.sh clears it.
+  env -i HOME="$HOME" "$SHELL" -lc '[ -n "${GH_TOKEN:-}${GITHUB_TOKEN:-}" ]' >/dev/null 2>&1 \
+    && note "your login shell exports GH_TOKEN or GITHUB_TOKEN; env.sh clears it for the agent, but revoke it if it can administer"
   [ -n "${owners// /}" ] || problem "no tokens stored in $(t "$TOKENS")"
   for o in $owners; do check_token "$o" || true; done
   echo "Steps 03 and 04 (advisory)"
@@ -152,8 +161,11 @@ echo "  $(state "$AG/env.sh")  $(t "$AG/env.sh")   (default owner $default_owner
 echo "  $(state "$AH/bin/gh")  $(t "$AH/bin/gh")   (from files/gh)"
 for f in $(startup_files); do
   if [ "$(last_line "$f")" = "$SOURCE_LINE" ]; then echo "  keep    $(t "$f")   (already ends with the source line)"
-  elif [ -f "$f" ] && grep -qxF "$SOURCE_LINE" "$f"; then echo "  move    the source line to the end of $(t "$f")"
-  else echo "  append  the source line to $(t "$f")"; fi
+  elif new_bash_profile "$f"; then echo "  create  $(t "$f")   (sources ~/.profile, then the source line)"
+  elif [ ! -f "$f" ]; then echo "  create  $(t "$f")   (the source line only)"
+  elif grep -aqxF "$OLD_SOURCE_LINE" "$f"; then echo "  replace the old source line in $(t "$f"), at the end   (backup $(t "$f").agent-bak)"
+  elif grep -aqxF "$SOURCE_LINE" "$f"; then echo "  move    the source line to the end of $(t "$f")   (backup $(t "$f").agent-bak)"
+  else echo "  append  the source line to $(t "$f")   (backup $(t "$f").agent-bak)"; fi
 done
 echo "  source line: $SOURCE_LINE"
 echo "Nothing else changes. Your ~/.gitconfig, ~/.ssh and own gh login are not touched."
@@ -188,6 +200,8 @@ cat > "$AG/gitconfig" <<CFG
     helper =
     helper = $HELPER
     useHttpPath = true
+[core]
+    askPass =
 [url "https://github.com/"]
     insteadOf = git@github.com:
     insteadOf = ssh://git@github.com/
@@ -200,6 +214,10 @@ export GIT_CONFIG_GLOBAL="\$HOME/.config/agent-git/gitconfig"
 export GH_CONFIG_DIR="\$HOME/.config/agent-gh"
 export AGENT_GH_DEFAULT_OWNER=$default_owner
 export PATH="\$HOME/.config/agent-gh/bin:\$PATH"
+# Inherited tokens would skip the shim's routing; askpass and prompts would let git
+# fall back to another credential.
+unset GH_TOKEN GITHUB_TOKEN GIT_ASKPASS SSH_ASKPASS
+export GIT_TERMINAL_PROMPT=0
 # Claude Code resets PATH from its shell snapshot after startup files run;
 # a function survives that, so plain gh still reaches the shim.
 gh() { "\$HOME/.config/agent-gh/bin/gh" "\$@"; }
@@ -211,7 +229,12 @@ install -m 755 "$HERE/files/gh" "$AH/bin/gh"
 for f in $(startup_files); do
   [ "$(last_line "$f")" = "$SOURCE_LINE" ] && continue
   tmp=$(mktemp)
-  [ -f "$f" ] && grep -vxF "$SOURCE_LINE" "$f" > "$tmp" || true
+  if [ -f "$f" ]; then
+    cp -p "$f" "$f.agent-bak"
+    grep -avxF -e "$SOURCE_LINE" -e "$OLD_SOURCE_LINE" "$f" > "$tmp" || true
+  elif new_bash_profile "$f"; then
+    printf '%s\n' "$PROFILE_LINE" > "$tmp"
+  fi
   printf '%s\n' "$SOURCE_LINE" >> "$tmp"
   cat "$tmp" > "$f"; rm -f "$tmp"
 done
