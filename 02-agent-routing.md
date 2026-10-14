@@ -49,8 +49,9 @@ tokens. These make one less likely, but none is a boundary:
 
 ## Before you run it
 
-- [Step 01](01-github.md) is done: you have the agent's token for each
-  owner, ready to paste.
+- [Step 01](01-github.md) is done, except the agent's tokens. Create
+  each one in the browser when the installer asks for it, and paste it
+  straight in. Never save a token yourself; the installer stores it.
 - You run the installer in a terminal, so it can ask for each token
   with your typing hidden.
 - If you sign commits with SSH (`gpg.format=ssh`), decide how agent
@@ -202,12 +203,12 @@ them in a CLI session and in a Desktop session, inside a checkout of
 | Transport | `GIT_TRACE=1 git ls-remote origin HEAD 2>&1 \| grep -m1 -o 'https://github.com[^ ]*'` | an https URL |
 | Token used | `gh api user --jq .login` | your login |
 | Admin blocked | `gh api repos/ExampleOrg/repo/keys 2>&1 \| grep -o 'HTTP 403'` | `HTTP 403` |
-| Approval blocked | `gh pr review 1 --approve` | refused by the shim |
+| Approval blocked | `gh pr review 999999999 --approve` | refused by the shim; real `gh` would say not found |
 | Feature push | `git push origin HEAD:refs/heads/zz-agent-test && git push origin --delete zz-agent-test` | both succeed |
 | PR | `gh pr list --limit 1` | works |
-| PR checks | `gh pr checks <n>`, for an open PR | its CI results |
+| PR checks | `gh pr checks N`, for an open PR N | its CI results |
 | CI runs | `gh run list --limit 1` | the latest workflow run |
-| Personal owner | `git ls-remote git@github.com:alice/<repo>.git HEAD` | a sha |
+| Personal owner | `git ls-remote git@github.com:alice/REPO.git HEAD` | a sha |
 | Workflow file | push a branch that touches `.github/workflows/x.yml` | rejected: the token lacks Workflows |
 
 The admin check reads a repo's deploy keys, which needs Administration.

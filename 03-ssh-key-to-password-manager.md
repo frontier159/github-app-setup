@@ -109,8 +109,10 @@ the web and add a new key. It matters for a server where this key is
 your only way in.
 
 For an independent copy, use Bitwarden's encrypted export: **Settings
-→ Export vault**, format **.json (Encrypted)**, with a password you
-choose and keep somewhere other than this vault. It includes SSH key
+→ Export vault**, format **.json (Encrypted)**, export type **File
+password protected**, with a password you choose and keep somewhere
+other than this vault. The **Account restricted** type decrypts only
+with this Bitwarden account. The export includes SSH key
 items. The file is encrypted, so a cloud folder such as iCloud Drive is
 a reasonable place for it. Do not use the CSV export: it leaves out SSH
 keys and is not encrypted.
@@ -150,7 +152,7 @@ New terminal, then:
 ssh-add -L | ssh-keygen -lf -          # fingerprint from the inventory appears
 mv ~/.ssh/id_rsa ~/.ssh/id_rsa.disabled
 ssh -T git@github.com                  # Bitwarden prompts; "Hi alice!"
-git -C ~/git/<repo> fetch              # works
+git -C ~/git/REPO fetch                # works
 ```
 
 If `ssh -T` fails, `ssh -vT git@github.com 2>&1 | grep -i 'agent\|Offering'`
@@ -183,7 +185,7 @@ ls ~/.ssh                              # id_rsa.pub may stay; it is public
 Each item from the inventory that needs a key file gets its own:
 
 ```zsh
-ssh-keygen -t ed25519 -f ~/.ssh/<job-name> -C "<job> on $(hostname)"
+ssh-keygen -t ed25519 -f ~/.ssh/JOB -C "JOB on $(hostname)"
 ```
 
 Add the public half only where that job needs it. For GitHub, that is
@@ -198,8 +200,9 @@ item.
 
 ## Break-glass
 
-For a job that needs the key as a file, copy the private key from the
-Bitwarden item, then use it from a private temporary folder:
+For a job that needs the key as a file, pause any clipboard manager
+and turn off Handoff. Then copy the private key from the Bitwarden
+item, and use it from a private temporary folder:
 
 ```zsh
 T=$(mktemp -d) && pbpaste > "$T/key" && chmod 600 "$T/key" && pbcopy < /dev/null
@@ -226,7 +229,8 @@ Bitwarden prompt.
 
 ## Rollback
 
-Copy the private key from the Bitwarden item, then:
+Pause any clipboard manager and turn off Handoff. Copy the private key
+from the Bitwarden item, then:
 
 ```zsh
 pbpaste > ~/.ssh/id_rsa && chmod 600 ~/.ssh/id_rsa && pbcopy < /dev/null

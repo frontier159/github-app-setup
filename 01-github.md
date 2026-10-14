@@ -37,7 +37,9 @@ gh auth status
 
 To replace it, create a token as in [The token
 recipe](#the-token-recipe) for the owner you use `gh` with most, then
-log in from the clipboard so it never appears in history:
+log in from the clipboard so it never appears in history. Pause any
+clipboard manager and turn off Handoff first, or the token lands in
+clipboard history:
 
 ```zsh
 pbpaste | gh auth login --with-token
@@ -49,7 +51,7 @@ If `gh auth status` lists more than one account, log out of each one
 you are not keeping:
 
 ```zsh
-gh auth logout --hostname github.com --user <login>
+gh auth logout --hostname github.com --user LOGIN
 ```
 
 Logging in with a token leaves the old browser login valid on GitHub.
@@ -57,7 +59,7 @@ Revoke it: GitHub → **Settings → Applications → Authorized OAuth Apps
 → GitHub CLI → Revoke**.
 
 A PAT covers one owner, so your own `gh` stops working on every other
-owner. Use the browser or `gh-admin` there.
+owner. Use the browser there, or a `gh-admin` token for that owner.
 
 Admin work then goes in the browser, or through
 [`gh-admin`](elevated-gh-access.md), which keeps a stronger token
@@ -74,7 +76,7 @@ security dump-keychain 2>/dev/null | grep -iE '"(svce|srvr)"<blob>=.*github'
 grep -c github.com ~/.git-credentials ~/.netrc 2>/dev/null
 grep -lE 'GH_TOKEN|GITHUB_TOKEN' ~/.zshenv ~/.zprofile ~/.zshrc ~/.zlogin ~/.bash_profile ~/.bashrc ~/.profile 2>/dev/null
 grep -rlE 'gh[pousr]_[A-Za-z0-9]{36}|github_pat_' ~/.npmrc ~/.docker ~/.config 2>/dev/null
-/usr/bin/jq -r '[.. | objects | .mcpServers? // empty | keys[]] | unique[]' ~/.claude.json 2>/dev/null
+jq -r '[.. | objects | .mcpServers? // empty | keys[]] | unique[]' ~/.claude.json
 ```
 
 - **A keychain item** that names GitHub holds a token: one git stored
@@ -112,8 +114,11 @@ apart, for example `agent-ExampleOrg`. Keep them separate from your
 own login's token, so you can revoke the agent's without touching
 yours.
 
-Copy each token as you create it; GitHub shows it once.
-[Step 02](02-agent-routing.md#run-the-installer) asks you to paste it.
+Do not create them all up front. GitHub shows each token once. Never
+save one yourself, in a file or in notes; the installer stores it. Run
+[the installer](02-agent-routing.md#run-the-installer) first. At each
+"Paste the agent's PAT for OWNER" prompt, create that owner's token in
+the browser and paste it straight in.
 
 ## The token recipe
 
@@ -214,17 +219,19 @@ paid GitHub plan.
 
 After [step 02](02-agent-routing.md) has stored the tokens:
 
-```bash
+```zsh
 ./install.sh --check
 ./check-github.sh --repo ExampleOrg/repo
+./check-github.sh --solo --repo alice/dotfiles
 ```
 
 `install.sh --check` checks each stored token: that it is a
 fine-grained PAT, that GitHub accepts it, how long until it expires,
 and that an admin-only call is refused. `check-github.sh` checks each
 `--repo`'s default branch rules and tag rules against
-[Rulesets](#rulesets). Repeat `--repo` for each repo you protect. Add
-`--solo` for repos only you work on; it skips the pull request checks.
+[Rulesets](#rulesets). Repeat `--repo` for each repo you protect. `--solo` skips the pull
+request checks on every repo in that call, so run the repos only you
+work on in a separate call.
 Both change nothing, print no token, and exit non-zero on a problem.
 
 `check-github.sh` cannot see bypass lists with these tokens. Check them
