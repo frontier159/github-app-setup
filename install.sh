@@ -230,6 +230,8 @@ export GIT_TERMINAL_PROMPT=0
 export SSL_CERT_FILE=/etc/ssl/cert.pem
 # npm caches in ~/.npm, which the sandbox does not let it write.
 export npm_config_cache="\${TMPDIR:-/tmp}/npm-cache"
+# Dev servers that open a browser on start fail at it inside the sandbox.
+export BROWSER=none
 # Claude Code resets PATH from its shell snapshot after startup files run;
 # a function survives that, so plain gh still reaches the shim.
 gh() { "\$HOME/.config/agent-gh/bin/gh" "\$@"; }

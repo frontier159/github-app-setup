@@ -171,6 +171,13 @@ match wins. An ask rule prompts even in auto mode.
   boundary. Never use an extension that drives your real browser for
   this; that browser holds your sessions.
 
+Dev servers that open a browser on start, such as Vite, Storybook or
+Ladle, fail that step inside the sandbox, often with blocked `ps` or
+`open` calls. Step 02's env file sets `BROWSER=none`, which these tools
+read as "never open a browser". A dev server whose port is busy may
+quietly pick another one, so read the actual port from its startup
+output before pointing the browser tools at it.
+
 ### `gh` and other Go programs fail TLS
 
 - **Symptom:** `gh` fails with a certificate error, OSStatus -26276.
