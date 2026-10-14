@@ -38,22 +38,33 @@ Notes:
 - `Read(~/.ssh/**)` covers the Read tool and the common file commands
   (`cat`, `head`, `sed`) by pattern. `filesystem.denyRead` covers every
   process, including `grep -r` and scripts. Keep both.
+- Read and Edit deny rules also feed the sandbox's `denyRead` and
+  `denyWrite`.
 - The `Edit(...)` rules cover every file-editing tool, which runs
-  outside the sandbox. They stop the agent changing what you run: the
-  `gh-admin` wrapper and other tools in `~/.local/bin`, Homebrew's
-  `gh` and `bw`, the agent's routing files, and your shell startup
-  files. A changed copy of any of them could catch your master password
-  or a token.
+  outside the sandbox. They stop the agent changing the files they
+  name, each of which runs code as you: the `gh-admin` wrapper and
+  other tools in `~/.local/bin`, Homebrew's `gh` and `bw`
+  (`/opt/homebrew`, or `/usr/local` on Intel), the agent's routing
+  files, your shell startup and logout files, your git config, `~/.ssh`
+  (its `config` can run commands), and `~/Library/LaunchAgents`. A
+  changed copy of any of them could catch your master password or a
+  token. Files the list does not name stay open; see
+  [Known limits](#known-limits).
 - The Bitwarden paths are the desktop app's data (dmg and App Store
   builds) and the CLI's. Each holds an encrypted copy of your vault,
   with your SSH key and the `gh-admin` token, protected only by your
   master password. The `Read(...)` rules cover the Read tool;
   `denyRead` covers processes.
-- Do not deny `~/.gitconfig`; the agent's config includes it.
+- The browser paths hold your GitHub session cookies and the
+  Bitwarden browser extension's copy of your vault. Add any other
+  browser you use.
+- Do not deny reads of `~/.gitconfig`; the agent's config includes it.
 - `~/.config/agent-git/tokens/` stays readable on purpose. It holds
   the agent's credentials.
 - `allowedDomains` lists GitHub only. Other hosts prompt on first use;
-  approve the registries and RPC endpoints your repos reach.
+  approve the registries and RPC endpoints your repos reach. CI logs
+  come from `*.actions.githubusercontent.com` and
+  `*.blob.core.windows.net`, so the first log read prompts too.
 - `allowUnixSockets` lists only the GPG agent socket. The agent signs
   commits with your GPG key, as it does today; commits stay yours.
   The same socket also lets the agent decrypt anything encrypted to
@@ -64,7 +75,9 @@ Notes:
 - `allowUnsandboxedCommands: false` removes the "run this outside the
   sandbox" escape. If a tool needs more, add a path or domain instead of
   flipping this.
-- `allowLocalBinding: true` keeps local dev servers working.
+- `allowLocalBinding` is left off. Set it to `true` if the agent runs
+  local dev servers. The cost: sandboxed commands can then reach any
+  service on localhost, such as a `bw serve` you started.
 - `excludedCommands` is not used. Anything listed there runs with full
   access, which would undo the point for `git` or `gh`.
 
@@ -88,6 +101,11 @@ enforced should use managed settings.
   edit check under [Checks](#checks) in Desktop too.
 - **Desktop.** If Desktop reads `~/.ssh` while the CLI cannot, Desktop
   is not applying the sandbox. [Steps 02](02-agent-routing.md) and [03](03-ssh-key-to-password-manager.md) still hold.
+- **Code the agent wrote.** It runs as you, unsandboxed, when you run
+  it outside an agent session: `npm test`, `make`, a git hook in a
+  fresh clone, an `.envrc`. No deny rule covers that. Run builds and
+  tests from the agent session, or read the diff, before you next type
+  your master password.
 
 ## Checks
 
@@ -97,13 +115,14 @@ session's working directory, so the signing line needs the session to
 start there. Ask the agent to run each line and report the result:
 
 ```zsh
+git switch -c zz-sandbox-test                # a scratch branch for the signing line
 ls ~/.ssh                                    # permission denied
 cat ~/.config/gh/hosts.yml                   # denied
 ssh -T git@github.com                        # denied or fails to connect
 git ls-remote origin HEAD                    # a sha (HTTPS, agent token)
 gh api user --jq .login                      # your login, via the agent token
 git commit --allow-empty -S -m "sandbox signing test" && git log --show-signature -1
-<your repo's normal build or check command>
+BUILD_COMMAND                                # your repo's normal build or check
 ```
 
 Then the edit check. Ask the agent to create
@@ -111,10 +130,10 @@ Then the edit check. Ask the agent to create
 deny rule must refuse it. If the file appears, delete it: that session
 ignores the `Edit(...)` rules.
 
-The signing line must show a good signature. Run it on a scratch
-branch and drop the commit with `git reset --hard HEAD~1`. Signing
-needs only the agent socket: a signed commit succeeded with every write
-to `~/.gnupg` blocked.
+The signing line must show a good signature. Then switch back and
+delete the scratch branch with `git branch -D zz-sandbox-test`.
+Signing needs only the agent socket: a signed commit succeeded with
+every write to `~/.gnupg` blocked.
 
 ## Rollback
 

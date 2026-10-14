@@ -95,6 +95,10 @@ grep -rlE 'gh[pousr]_[A-Za-z0-9]{36}|github_pat_' ~/.npmrc ~/.docker ~/.config 2
 - **A startup file that sets `GH_TOKEN` or `GITHUB_TOKEN`** hands that
   token to every shell. Remove the line and revoke the token. The
   agent's env file clears both, but a bypass still finds the file.
+- **A signed-in browser** keeps your GitHub session cookie, and the
+  Bitwarden extension's vault copy, in its profile folder.
+  [Step 04](04-claude-code-sandbox.md#settings) denies the agent those
+  folders.
 - **Old tokens and grants** stay live until you revoke them. Review
   [github.com/settings/tokens](https://github.com/settings/tokens) and
   [github.com/settings/applications](https://github.com/settings/applications).

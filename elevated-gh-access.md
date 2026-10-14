@@ -87,7 +87,7 @@ wrapper's memory and `gh`'s environment, never on disk or in argv.
    ```
 
    It prompts for your master password and shows the elevated token's
-   account. After it returns, `bw status` reports `locked`.
+   account.
 
 If you add or change the `gh-admin` item in another Bitwarden app, run
 `bw sync` once so the CLI sees it.
@@ -104,12 +104,17 @@ If you add or change the `gh-admin` item in another Bitwarden app, run
   password for anything running as you.
 - **The agent check is a speed bump.** The script refuses when
   `CLAUDECODE` is set, but an agent could unset it. The master
-  password is the real control, as long as the agent cannot change
-  what you run: the sandbox confines its Bash writes, and the
-  `Edit(...)` deny rules cover its file tools, with the Desktop caveat
-  above. The settings fragment in
-  [step 04](04-claude-code-sandbox.md#settings) also denies `gh-admin`
-  and `bw` to the agent, and stops it reading Bitwarden's vault copies.
+  password is the real control. The sandbox confines the agent's Bash
+  writes. The `Edit(...)` deny rules cover its file tools, for the
+  files they name only, with the Desktop caveat above. The settings
+  fragment in [step 04](04-claude-code-sandbox.md#settings) also denies
+  `gh-admin` and `bw` to the agent, and stops it reading the Bitwarden
+  vault copies it names.
+- **Code the agent wrote runs as you** when you run it outside an
+  agent session: `npm test`, `make`, a git hook in a fresh clone, an
+  `.envrc`. It runs unsandboxed, so it could catch your master
+  password. Run builds and tests from the agent session, or read the
+  diff, before you next type your master password.
 
 ## Limits
 

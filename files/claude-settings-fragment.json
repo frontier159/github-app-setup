@@ -6,8 +6,16 @@
       "Read(~/Library/Application Support/Bitwarden/**)",
       "Read(~/Library/Application Support/Bitwarden CLI/**)",
       "Read(~/Library/Containers/com.bitwarden.desktop/**)",
+      "Read(~/Library/Application Support/Google/Chrome/**)",
+      "Read(~/Library/Application Support/Firefox/**)",
+      "Read(~/Library/Application Support/BraveSoftware/**)",
+      "Read(~/Library/Application Support/Arc/**)",
+      "Read(~/Library/Application Support/Microsoft Edge/**)",
+      "Read(~/Library/Safari/**)",
+      "Read(~/Library/Cookies/**)",
       "Edit(~/.local/bin/**)",
       "Edit(//opt/homebrew/**)",
+      "Edit(//usr/local/**)",
       "Edit(~/.config/agent-git/**)",
       "Edit(~/.config/agent-gh/**)",
       "Edit(~/.zshenv)",
@@ -16,6 +24,13 @@
       "Edit(~/.bash_profile)",
       "Edit(~/.bashrc)",
       "Edit(~/.profile)",
+      "Edit(~/.zlogin)",
+      "Edit(~/.zlogout)",
+      "Edit(~/.bash_login)",
+      "Edit(~/.gitconfig)",
+      "Edit(~/.config/git/**)",
+      "Edit(~/.ssh/**)",
+      "Edit(~/Library/LaunchAgents/**)",
       "Bash(security *)",
       "Bash(git credential-osxkeychain *)",
       "Bash(gh-admin *)",
@@ -32,7 +47,14 @@
         "~/.config/gh",
         "~/Library/Containers/com.bitwarden.desktop",
         "~/Library/Application Support/Bitwarden",
-        "~/Library/Application Support/Bitwarden CLI"
+        "~/Library/Application Support/Bitwarden CLI",
+        "~/Library/Application Support/Google/Chrome",
+        "~/Library/Application Support/Firefox",
+        "~/Library/Application Support/BraveSoftware",
+        "~/Library/Application Support/Arc",
+        "~/Library/Application Support/Microsoft Edge",
+        "~/Library/Safari",
+        "~/Library/Cookies"
       ]
     },
     "network": {
@@ -42,8 +64,7 @@
       ],
       "allowUnixSockets": [
         "~/.gnupg/S.gpg-agent"
-      ],
-      "allowLocalBinding": true
+      ]
     }
   }
 }
