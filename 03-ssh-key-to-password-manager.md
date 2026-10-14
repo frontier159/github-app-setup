@@ -117,12 +117,16 @@ keys and is not encrypted.
 
 ## Enable the agent
 
-Bitwarden desktop → **Settings → Enable SSH agent**. Also tick **Ask for
-authorization when using SSH agent**. Settings → Security → **Unlock
+Bitwarden desktop → **Settings → Enable SSH agent**. Then set **Ask for
+authorization when using SSH agent** to the choice that asks every
+time, at least until [step 04](04-claude-code-sandbox.md) is done. A
+choice that remembers an approval lets later requests through without
+a prompt. Settings → Security → **Unlock
 with Touch ID** makes the unlock prompt a fingerprint. The docs do not
 say whether Touch ID covers the per-signature prompt.
 
-Confirm the socket exists:
+Confirm the socket exists. This is the dmg path; App Store users use
+the path from the table above:
 
 ```zsh
 ls -l ~/.bitwarden-ssh-agent.sock
@@ -130,7 +134,8 @@ ls -l ~/.bitwarden-ssh-agent.sock
 
 ## Point your shells at it
 
-In `~/.zshenv`, or `~/.bash_profile` for bash, **above** the source line from [step 02](02-agent-routing.md#why-two-startup-files):
+In `~/.zshenv`, or `~/.bash_profile` for bash, **above** the source line from [step 02](02-agent-routing.md#why-two-startup-files).
+App Store users use the path from the table above:
 
 ```zsh
 export SSH_AUTH_SOCK="$HOME/.bitwarden-ssh-agent.sock"
@@ -181,8 +186,10 @@ Each item from the inventory that needs a key file gets its own:
 ssh-keygen -t ed25519 -f ~/.ssh/<job-name> -C "<job> on $(hostname)"
 ```
 
-Add the public half only where that job needs it. Narrow keys per job
-beat the old shared RSA key; losing one is bounded.
+Add the public half only where that job needs it. For GitHub, that is
+a read-only deploy key on the one repo the job uses, never a key on
+your account. Narrow keys per job beat the old shared RSA key; losing
+one is bounded.
 
 Optional rotation: generate an Ed25519 key in Bitwarden (New item → SSH
 key, no import). Add its public key to GitHub and each server. Use it

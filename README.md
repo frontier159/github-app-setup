@@ -45,8 +45,10 @@ The rest of this page explains the model and why it is built this way.
 v0.1.0 gave the agent a GitHub App. This version uses your own
 restricted PATs instead. To move over:
 
-1. Do [step 01](01-github.md), then rerun the installer with your
-   `--owner` flags. It replaces the old source line.
+1. Do [step 01](01-github.md), then rerun the installer with the full
+   command from [step 02](02-agent-routing.md#run-the-installer):
+   `--owner` for each owner, and `--default-owner`. It replaces the old
+   source line.
 2. Delete the App's key and helper, if present:
 
    ```zsh
@@ -55,6 +57,15 @@ restricted PATs instead. To move over:
 
 3. Uninstall the App from each org and account, then delete it.
 4. Once its open PRs are merged, unassign its CodeRabbit seat.
+5. If you finished step 03 under v0.1.0, run its new macOS agent
+   check in [Remove the file](03-ssh-key-to-password-manager.md#remove-the-file).
+6. bash users: if v0.1.0 created a `~/.bash_profile` that holds only
+   the source line, add this line at its top, or `~/.profile` stops
+   loading:
+
+   ```bash
+   [ -r "$HOME/.profile" ] && . "$HOME/.profile"
+   ```
 
 ## The problem
 
@@ -246,8 +257,10 @@ counterpart.
   `~/.config/agent-gh/`, including one token file per owner. The
   installer writes them; [step 02](02-agent-routing.md#what-it-writes)
   lists each one. Outside those directories it adds one source line to
-  two startup files, keeps a `.agent-bak` copy of each, and touches
-  nothing else of yours.
+  two startup files, with a first backup of each, kept across reruns.
+  For bash users with only `~/.profile`, it also adds a line that
+  sources `~/.profile` to the new `~/.bash_profile`. It touches nothing
+  else of yours.
 - [Elevated `gh` access](elevated-gh-access.md) is optional: `gh-admin`
   runs one admin command with a token kept in Bitwarden.
 - [`files/`](files/) holds the `gh` shim, the credential helper,

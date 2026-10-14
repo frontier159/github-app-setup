@@ -53,17 +53,21 @@ tokens. These make one less likely, but none is a boundary:
   owner, ready to paste.
 - You run the installer in a terminal, so it can ask for each token
   with your typing hidden.
+- If you sign commits with SSH (`gpg.format=ssh`), decide how agent
+  commits are signed first. See
+  [Who the commits belong to](#who-the-commits-belong-to).
 
 ## The credential helper
 
 [`files/git-credential-agent`](files/git-credential-agent) is about 25
 lines. When git needs a password for `github.com`, it takes the repo's
 owner from the path git asks about and returns the token stored in
-`~/.config/agent-git/tokens/<owner>`. It answers only over https. Any
-other protocol or host, or an owner with no token file, gets nothing.
-git then fails: it cannot fall back to another credential, because the
-env file turns off askpass and terminal prompts. Read the helper before
-you run the installer.
+`~/.config/agent-git/tokens/<owner>`. It answers only over https. For
+an owner with no token file, it tells git to stop, so git asks no later
+helper, not even one a repo sets in its own config. Any other protocol
+or host gets nothing, and git asks the next helper. The env file turns
+off askpass and terminal prompts, so git cannot fall back to them.
+Read the helper before you run the installer.
 
 ## Run the installer
 
@@ -112,9 +116,10 @@ and [step 04](04-claude-code-sandbox.md) look done.
 
 The startup files are `~/.zshenv` and `~/.zprofile` for zsh, and
 `~/.bash_profile` and `~/.bashrc` for bash. Before it changes one, the
-installer copies it to `<file>.agent-bak`. Login bash stops reading
-`~/.profile` once `~/.bash_profile` exists. So if you have only
-`~/.profile`, the new `~/.bash_profile` sources it first. Your
+installer makes a first backup, `<file>.agent-bak`, and keeps it across
+reruns. Login bash stops reading `~/.profile` once `~/.bash_profile`
+exists. So if you have only `~/.profile`, the new `~/.bash_profile`
+gets a line that sources it, above the source line. Your
 `~/.gitconfig`, `~/.ssh` and own `gh` login are never touched.
 
 The tokens expire on the date you set in step 01. `--check` warns two
@@ -158,8 +163,22 @@ the source line can undo the unset.
 
 Everything the agent does is recorded as you: commits, pushes, PRs,
 comments and reviews. Commit author and committer come from
-`user.name` and `user.email` in the included `~/.gitconfig`, and
-commits stay signed with your key.
+`user.name` and `user.email` in the included `~/.gitconfig`.
+
+GPG signing keeps working: agent commits stay signed with your key.
+SSH signing (`gpg.format=ssh`) does not. Agent shells have no SSH
+agent, step 03 removes the key file, and step 04 blocks the sockets.
+With `commit.gpgsign=true`, every agent commit then fails. Choose one:
+
+- Switch your signing to GPG.
+- After installing, add these lines by hand to
+  `~/.config/agent-git/gitconfig`, so agent commits go unsigned. The
+  installer rewrites that file, so add them again after each rerun.
+
+  ```ini
+  [commit]
+      gpgsign = false
+  ```
 
 Because its approvals would count as yours, the `gh` shim refuses
 `gh pr review --approve` and API calls that approve. Comment reviews
