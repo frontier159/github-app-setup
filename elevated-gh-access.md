@@ -22,10 +22,13 @@ Plain `gh` stays on your restricted login. The pattern is the same as
 `aws-vault exec`: the strong credential is locked away and comes out
 for one command.
 
-Set up step 04 first. Before it confines the agent's writes, the agent
-can replace `gh-admin` or `bw`, or add a `gh-admin` function to a
-startup file, and catch your master password the next time you type
-it.
+Set up step 04 first. Without it, the agent can replace `gh-admin` or
+`bw`, or add a `gh-admin` function to a startup file, and catch your
+master password the next time you type it. Step 04's sandbox confines
+the agent's Bash writes. Its `Edit(...)` deny rules cover the file
+tools, which run outside the sandbox. Desktop has a report of ignoring
+some Edit and Write deny rules (anthropics/claude-code#98443), so run
+step 04's [edit check](04-claude-code-sandbox.md#checks) in Desktop.
 
 ## How it works
 
@@ -101,10 +104,12 @@ If you add or change the `gh-admin` item in another Bitwarden app, run
   password for anything running as you.
 - **The agent check is a speed bump.** The script refuses when
   `CLAUDECODE` is set, but an agent could unset it. The master
-  password is the real control, once step 04 stops the agent changing
-  what you run. The settings fragment in
+  password is the real control, as long as the agent cannot change
+  what you run: the sandbox confines its Bash writes, and the
+  `Edit(...)` deny rules cover its file tools, with the Desktop caveat
+  above. The settings fragment in
   [step 04](04-claude-code-sandbox.md#settings) also denies `gh-admin`
-  and `bw` to the agent, and stops it reading the CLI's vault copy.
+  and `bw` to the agent, and stops it reading Bitwarden's vault copies.
 
 ## Limits
 

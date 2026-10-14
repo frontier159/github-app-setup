@@ -3,6 +3,19 @@
     "deny": [
       "Read(~/.ssh/**)",
       "Read(~/.config/gh/**)",
+      "Read(~/Library/Application Support/Bitwarden/**)",
+      "Read(~/Library/Application Support/Bitwarden CLI/**)",
+      "Read(~/Library/Containers/com.bitwarden.desktop/**)",
+      "Edit(~/.local/bin/**)",
+      "Edit(//opt/homebrew/**)",
+      "Edit(~/.config/agent-git/**)",
+      "Edit(~/.config/agent-gh/**)",
+      "Edit(~/.zshenv)",
+      "Edit(~/.zprofile)",
+      "Edit(~/.zshrc)",
+      "Edit(~/.bash_profile)",
+      "Edit(~/.bashrc)",
+      "Edit(~/.profile)",
       "Bash(security *)",
       "Bash(git credential-osxkeychain *)",
       "Bash(gh-admin *)",
@@ -18,6 +31,7 @@
         "~/.ssh",
         "~/.config/gh",
         "~/Library/Containers/com.bitwarden.desktop",
+        "~/Library/Application Support/Bitwarden",
         "~/Library/Application Support/Bitwarden CLI"
       ]
     },
