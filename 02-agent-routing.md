@@ -110,7 +110,7 @@ and [step 04](04-claude-code-sandbox.md) look done.
 |---|---|
 | `~/.config/agent-git/tokens/<owner>` | One token per owner, mode 600, in a folder only you can read |
 | `~/.config/agent-git/gitconfig` | The agent's global gitconfig. It includes your `~/.config/git/config` and `~/.gitconfig`, clears inherited credential helpers, adds the agent's helper, and rewrites SSH remotes to HTTPS |
-| `~/.config/agent-git/env.sh` | Sets `GIT_CONFIG_GLOBAL`, `GH_CONFIG_DIR` and the default owner, puts the shim dir first on `PATH`, and defines a `gh` function that calls the shim. Clears inherited GitHub tokens (`GH_TOKEN`, `GITHUB_TOKEN`), askpass programs and `SSH_AUTH_SOCK`, and turns off git's terminal prompt |
+| `~/.config/agent-git/env.sh` | Sets `GIT_CONFIG_GLOBAL`, `GH_CONFIG_DIR` and the default owner, puts the shim dir first on `PATH`, and defines a `gh` function that calls the shim. Clears inherited GitHub tokens (`GH_TOKEN`, `GITHUB_TOKEN`), askpass programs and `SSH_AUTH_SOCK`, and turns off git's terminal prompt. Points `SSL_CERT_FILE` at macOS's certificate bundle, because `gh` cannot reach the system's certificate service inside the sandbox |
 | `~/.config/agent-git/bin/git-credential-agent` | The [credential helper](#the-credential-helper), from `files/` |
 | `~/.config/agent-gh/bin/gh` | The [`gh` shim](files/gh). It finds the repo owner, gets that owner's token from git and exports it as `GH_TOKEN`, then runs the real `gh` |
 | the source line, at the end of two startup files | Loads `env.sh` only when `CLAUDECODE` is set |
@@ -206,7 +206,7 @@ them in a CLI session and in a Desktop session, inside a checkout of
 | Approval blocked | `gh pr review 999999999 --approve` | refused by the shim; real `gh` would say not found |
 | Feature push | `git push origin HEAD:refs/heads/zz-agent-test && git push origin --delete zz-agent-test` | both succeed |
 | PR | `gh pr list --limit 1` | works |
-| PR checks | `gh pr checks N`, for an open PR N | its CI results |
+| CI for a branch | `gh run list --branch BRANCH --limit 3` | its workflow runs and results |
 | CI runs | `gh run list --limit 1` | the latest workflow run |
 | Personal owner | `git ls-remote git@github.com:alice/REPO.git HEAD` | a sha |
 | Workflow file | push a branch that touches `.github/workflows/x.yml` | rejected: the token lacks Workflows |

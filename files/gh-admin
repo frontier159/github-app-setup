@@ -16,7 +16,7 @@ die() { echo "gh-admin: $*" >&2; exit 1; }
 command -v bw >/dev/null || die "Bitwarden CLI not found: brew install bitwarden-cli, then bw login"
 command -v gh >/dev/null || die "gh not found on PATH"
 
-cfg=$(mktemp -d)
+cfg=$(mktemp -d "${TMPDIR:-/tmp}/gh-admin.XXXXXX")
 cleanup() { stty echo </dev/tty 2>/dev/null || true; bw lock >/dev/null 2>&1 || true; rm -rf "$cfg"; }
 trap cleanup EXIT
 

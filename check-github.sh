@@ -28,7 +28,7 @@ done
 JQ=/usr/bin/jq; [ -x "$JQ" ] || JQ=$(command -v jq) || { echo "check-github: jq not found" >&2; exit 1; }
 command -v gh >/dev/null || { echo "check-github: gh not found" >&2; exit 1; }
 
-tmpdir=$(mktemp -d); trap 'rm -rf "$tmpdir"' EXIT
+tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/check-github.XXXXXX"); trap 'rm -rf "$tmpdir"' EXIT
 # stderr goes to a file, so an error message never reads as data.
 api() { local t=$1; shift; GH_TOKEN=$t GH_CONFIG_DIR="$tmpdir" command gh api "$@" 2>"$tmpdir/err"; }
 api_error() { tr '\n' ' ' < "$tmpdir/err"; }

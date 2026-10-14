@@ -95,7 +95,7 @@ check_token() {
     github_pat_*) ;;
     *) problem "$owner: not a fine-grained PAT; classic and OAuth tokens reach every repo and can administer them"; return 1 ;;
   esac
-  cfg=$(mktemp -d)
+  cfg=$(mktemp -d "${TMPDIR:-/tmp}/agent-gh.XXXXXX")
   headers=$(GH_TOKEN=$token GH_CONFIG_DIR=$cfg command gh api -i user 2>"$cfg/err") || {
     problem "$owner: gh api user failed: $(head -1 "$cfg/err"); the token may be expired or revoked"; rm -rf "$cfg"; return 1; }
   login=$(printf '%s\n' "$headers" | grep -o '"login": *"[^"]*"' | head -1 | sed 's/.*"\([^"]*\)"$/\1/')
@@ -226,6 +226,8 @@ export PATH="\$HOME/.config/agent-gh/bin:\$PATH"
 # fall back to another credential.
 unset GH_TOKEN GITHUB_TOKEN GIT_ASKPASS SSH_ASKPASS
 export GIT_TERMINAL_PROMPT=0
+# gh verifies TLS through a macOS service the sandbox blocks; the bundled roots avoid it.
+export SSL_CERT_FILE=/etc/ssl/cert.pem
 # Claude Code resets PATH from its shell snapshot after startup files run;
 # a function survives that, so plain gh still reaches the shim.
 gh() { "\$HOME/.config/agent-gh/bin/gh" "\$@"; }
@@ -236,7 +238,7 @@ install -m 755 "$HERE/files/gh" "$AH/bin/gh"
 
 for f in $(startup_files); do
   [ "$(last_line "$f")" = "$SOURCE_LINE" ] && continue
-  tmp=$(mktemp)
+  tmp=$(mktemp "${TMPDIR:-/tmp}/agent-startup.XXXXXX")
   if [ -f "$f" ]; then
     [ -e "$f.agent-bak" ] || cp -p "$f" "$f.agent-bak"
     grep -avxF -e "$SOURCE_LINE" -e "$OLD_SOURCE_LINE" "$f" > "$tmp" || true

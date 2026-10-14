@@ -139,10 +139,14 @@ Repository permissions (everything else stays No access):
 | Pull requests | Read and write | open, update, comment on and review PRs |
 | Issues | Read and write | issues, labels, PR conversation comments |
 | Actions | Read | inspect runs and logs |
-| Commit statuses | Read | see CI results |
+| Commit statuses | Read | see commit statuses |
 | Metadata | Read | mandatory, auto-selected |
 
 Organization permissions and Account permissions: all No access.
+
+Fine-grained tokens have no Checks permission, so `gh pr checks` and
+other check-run reads fail with 403. The agent reads CI through Actions
+instead: `gh run list --branch BRANCH` and `gh run view N`.
 
 Deliberately absent:
 
