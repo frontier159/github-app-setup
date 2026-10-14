@@ -27,7 +27,7 @@ done
 for pid in $pids; do
   args=$(ps -o args= -p "$pid" 2>/dev/null || echo "(exited)")
   host=$(printf '%s\n' "$args" | awk '{for (i = 2; i <= NF; i++) if ($i !~ /^-/ && $(i-1) !~ /^-[oiFpJlEcmbDLRW]$/) {print $i; exit}}')
-  cwd=$(lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p')
+  cwd=$(lsof -n -P -b -w -a -p "$pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p')
   echo "== ssh $pid, started $(ps -o lstart= -p "$pid" 2>/dev/null)"
   echo "   connects to: ${host:-unknown}"
   echo "   folder:      ${cwd/#$HOME/~}"
