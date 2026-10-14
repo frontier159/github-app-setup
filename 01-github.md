@@ -5,7 +5,7 @@
 | Required | yes |
 | Depends on | none |
 | If you skip it: security | The agent keeps whatever your current `gh` login and SSH key allow, which may include creating and deleting repos. |
-| If you skip it: operations | [Step 02](02-agent-identity.md) has no tokens to install. |
+| If you skip it: operations | [Step 02](02-agent-routing.md) has no tokens to install. |
 | If you skip it: change elsewhere | nothing |
 
 Browser work: two kinds of fine-grained personal access token (PAT),
@@ -57,7 +57,7 @@ own login's token, so you can revoke the agent's without touching
 yours.
 
 Copy each token as you create it; GitHub shows it once.
-[Step 02](02-agent-identity.md#run-the-installer) asks you to paste it.
+[Step 02](02-agent-routing.md#run-the-installer) asks you to paste it.
 
 ## The token recipe
 
@@ -138,7 +138,7 @@ paid GitHub plan.
 
 ## Checks
 
-After [step 02](02-agent-identity.md) has stored the tokens:
+After [step 02](02-agent-routing.md) has stored the tokens:
 
 ```bash
 ./install.sh --check

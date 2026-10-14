@@ -9,7 +9,7 @@ before. Claude Code (CLI and Desktop) on macOS is the worked example.
 You need:
 
 - macOS, with zsh as your login shell. bash is supported by the
-  installer but not yet confirmed to route; see [step 02](02-agent-identity.md#why-two-startup-files).
+  installer but not yet confirmed to route; see [step 02](02-agent-routing.md#why-two-startup-files).
 - git 2.32 or newer, and the `gh` CLI on your `PATH`.
 - `jq` for `check-github.sh`; it ships with macOS 15 and later.
 - A password manager with an SSH agent, for [step 03](03-ssh-key-to-password-manager.md).
@@ -25,7 +25,7 @@ Then:
 2. Do [step 01](01-github.md) in the browser. You end with one
    restricted fine-grained token per owner, and rulesets on the repos
    that matter.
-3. Run the installer, as [step 02](02-agent-identity.md#run-the-installer)
+3. Run the installer, as [step 02](02-agent-routing.md#run-the-installer)
    describes. It asks you to paste each token:
 
    ```bash
@@ -173,11 +173,11 @@ current repo owner's token and exports it as `GH_TOKEN`.
 | # | Step | What it does | Required | Time |
 |---|---|---|---|---|
 | 01 | [01-github.md](01-github.md) | Restricts your own `gh` login, creates the agent's PAT per owner, adds rulesets | yes | 20 min + 10 min per repo |
-| 02 | [02-agent-identity.md](02-agent-identity.md) | Runs [`install.sh`](install.sh): stores the tokens, writes the agent gitconfig, env file and `gh` shim, verifies each token | yes | 10 min |
+| 02 | [02-agent-routing.md](02-agent-routing.md) | Runs [`install.sh`](install.sh): stores the tokens, writes the agent gitconfig, env file and `gh` shim, verifies each token | yes | 10 min |
 | 03 | [03-ssh-key-to-password-manager.md](03-ssh-key-to-password-manager.md) | Imports your SSH key into Bitwarden, enables its SSH agent, deletes the key file | recommended | 30 min |
 | 04 | [04-claude-code-sandbox.md](04-claude-code-sandbox.md) | Turns on Claude Code's sandbox with reads of `~/.ssh` and agent sockets denied | recommended | 10 min |
 
-Finish and check [01](01-github.md) and [02](02-agent-identity.md)
+Finish and check [01](01-github.md) and [02](02-agent-routing.md)
 before [03](03-ssh-key-to-password-manager.md) and
 [04](04-claude-code-sandbox.md), so the agent has working HTTPS access
 before the SSH key moves. Each step ends with its own checks and its
@@ -202,7 +202,7 @@ Agent-specific, needs investigation per agent:
 | Network allowlist and unix sockets | `sandbox.network` | Codex defaults to network off inside its sandbox. Check that git and `gh` can still reach `github.com` |
 
 Rule of thumb: keep steps [01](01-github.md) to [03](03-ssh-key-to-password-manager.md) shared across agents. Give each agent
-its own version of [step 04](04-claude-code-sandbox.md) and its own marker in the [source line](02-agent-identity.md#why-two-startup-files).
+its own version of [step 04](04-claude-code-sandbox.md) and its own marker in the [source line](02-agent-routing.md#why-two-startup-files).
 
 ## On Linux
 
@@ -227,7 +227,7 @@ counterpart.
   `alice`).
 - Agent-only files live under `~/.config/agent-git/` and
   `~/.config/agent-gh/`, including one token file per owner. The
-  installer writes them; [step 02](02-agent-identity.md#what-it-writes)
+  installer writes them; [step 02](02-agent-routing.md#what-it-writes)
   lists each one. Outside those directories it adds one source line to
   two startup files and touches nothing else of yours.
 - [Elevated `gh` access](elevated-gh-access.md) is optional: `gh-admin`

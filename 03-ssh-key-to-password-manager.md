@@ -3,17 +3,17 @@
 | | |
 |---|---|
 | Required | recommended |
-| Depends on | [step 02](02-agent-identity.md) |
+| Depends on | [step 02](02-agent-routing.md) |
 | If you skip it: security | Your private key stays a readable file. Without [04](04-claude-code-sandbox.md) the agent can use it directly; with 04 the sandbox blocks the file, but any Bash path outside the sandbox, or a Desktop sandbox gap, can still use it. |
 | If you skip it: operations | Nothing changes; you keep the file-based key. |
 | If you skip it: change elsewhere | In [04](04-claude-code-sandbox.md#settings), keep `~/.ssh` in `denyRead` (already there); nothing else. |
 
 Goal: `~/.ssh/id_rsa` stops existing as a file. Your shells get the key
 from the password manager's SSH agent, with a prompt per use. Agent
-shells have no agent socket ([step 02](02-agent-identity.md#what-it-writes)). After [step 04](04-claude-code-sandbox.md) they cannot read
+shells have no agent socket ([step 02](02-agent-routing.md#what-it-writes)). After [step 04](04-claude-code-sandbox.md) they cannot read
 `~/.ssh` or open agent sockets at all.
 
-Prerequisite: [step 02 checks](02-agent-identity.md#checks) pass. The agent must already be on HTTPS.
+Prerequisite: [step 02 checks](02-agent-routing.md#checks) pass. The agent must already be on HTTPS.
 
 Only Bitwarden's flow was walked through. Bitwarden's SSH agent is
 part of its [desktop app](https://bitwarden.com/download/), with its
@@ -123,7 +123,7 @@ ls -l ~/.bitwarden-ssh-agent.sock
 
 ## Point your shells at it
 
-In `~/.zshenv`, or `~/.bash_profile` for bash, **above** the source line from [step 02](02-agent-identity.md#why-two-startup-files):
+In `~/.zshenv`, or `~/.bash_profile` for bash, **above** the source line from [step 02](02-agent-routing.md#why-two-startup-files):
 
 ```zsh
 export SSH_AUTH_SOCK="$HOME/.bitwarden-ssh-agent.sock"

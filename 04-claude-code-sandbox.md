@@ -3,8 +3,8 @@
 | | |
 |---|---|
 | Required | recommended |
-| Depends on | [step 02](02-agent-identity.md) |
-| If you skip it: security | Nothing OS-enforced stops the agent reading files or reaching agent sockets. [Step 02](02-agent-identity.md) is the only thing routing it to its tokens, and an env var can be unset. |
+| Depends on | [step 02](02-agent-routing.md) |
+| If you skip it: security | Nothing OS-enforced stops the agent reading files or reaching agent sockets. [Step 02](02-agent-routing.md) is the only thing routing it to its tokens, and an env var can be unset. |
 | If you skip it: operations | Nothing changes. |
 | If you skip it: change elsewhere | None, but [03](03-ssh-key-to-password-manager.md) becomes the main barrier. |
 
@@ -25,7 +25,7 @@ bundled in Desktop. The [checks](#checks) confirm it. It is off by default.
 Two consequences matter here. The Bitwarden agent socket is unreachable
 from the agent's processes. SSH git remotes fail inside the sandbox,
 because unix sockets and `~/.ssh` are denied. Both force the agent onto
-the HTTPS token path from [step 02](02-agent-identity.md).
+the HTTPS token path from [step 02](02-agent-routing.md).
 
 ## Settings
 
@@ -65,7 +65,7 @@ these.
   The deny rules are speed bumps. [Step 01](01-github.md#restrict-your-own-gh-login) makes that login a
   restricted token, so reading it gains the agent nothing.
 - **Desktop.** If Desktop reads `~/.ssh` while the CLI cannot, Desktop
-  is not applying the sandbox. [Steps 02](02-agent-identity.md) and [03](03-ssh-key-to-password-manager.md) still hold. Track
+  is not applying the sandbox. [Steps 02](02-agent-routing.md) and [03](03-ssh-key-to-password-manager.md) still hold. Track
   anthropics/claude-code#98443.
 
 ## Checks
