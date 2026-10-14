@@ -106,6 +106,24 @@ jq -r '[.. | objects | .mcpServers? // empty | keys[]] | unique[]' ~/.claude.jso
   [github.com/settings/applications](https://github.com/settings/applications).
   A classic token reaches every repo you can reach.
 
+## Find package-registry tokens
+
+Package managers keep registry tokens in your home folder. Agents, and
+the install scripts they run, can read these files. This prints each
+file and how many auth lines it holds, never a secret:
+
+```zsh
+for f in ~/.npmrc ~/.yarnrc.yml ~/.pypirc ~/.cargo/credentials.toml ~/.gem/credentials; do [ -f "$f" ] && printf '%s: %s auth lines\n' "$f" "$(grep -c -i -E 'token|_auth|password' "$f")"; done
+```
+
+- **Keep only read-only tokens.** Use granular tokens, limited to the
+  packages you install. A token that can publish lets an agent, or a
+  bad install script, publish as you.
+- **Remove dead ones.** An expired or revoked token makes every request
+  fail with 401, even for public packages.
+  [Step 05](05-living-with-the-sandbox.md#package-installs) covers the
+  errors that follow.
+
 ## Create the agent's token for each owner
 
 Create one PAT per owner the agent works in, such as `ExampleOrg` and

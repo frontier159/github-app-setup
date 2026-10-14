@@ -228,6 +228,52 @@ the top of that chain. Common sources are an editor's background fetch, a
 git app, or a terminal waiting on `git fetch`. Agent shells cannot reach the
 agent socket; if the chain shows `claude`, deny the prompt.
 
+### Editors and git apps
+
+Editors and git apps fetch in the background, such as VS Code with
+`git.autofetch` on. Each fetch over SSH asks for the key. There are two
+fixes.
+
+**Turn off auto-fetch.** In VS Code, set `"git.autofetch": false`.
+You fetch by hand, and each prompt then matches something you did.
+
+**Point the editor's git at the agent tokens.**
+[`files/git-pat`](files/git-pat) runs git with the agent's config, so
+it uses HTTPS with the per-owner tokens from
+[step 02](02-agent-routing.md), never SSH. Install it:
+
+```zsh
+mkdir -p ~/.local/bin && install -m 755 files/git-pat ~/.local/bin/git-pat
+```
+
+Then point the editor at it. For VS Code, in its settings, with your
+home folder in place of `/Users/YOU`:
+
+```json
+"git.path": "/Users/YOU/.local/bin/git-pat"
+```
+
+What changes:
+
+- The editor's remotes switch to HTTPS. Your own terminal stays on SSH.
+- Commits stay yours and signed. The agent's config includes your own.
+- An owner with no agent token fails, and so does every owner once its
+  token expires or is revoked.
+- The editor can do only what the agent's tokens allow. Pushing a
+  change to a workflow file fails, for example.
+- Extensions with their own GitHub sign-in, such as VS Code's GitHub
+  Pull Requests, do not use `git.path`.
+
+Background fetch failures are silent. To see refusals in VS Code, open
+**View → Output** and pick **Git**:
+
+| Message | Meaning |
+|---|---|
+| `told us to quit` | no agent token for that owner |
+| `Permission to OWNER/REPO.git denied`, or 403 | the token is not allowed, or the repo is not selected on it |
+| `refusing to allow a Personal Access Token to create or update workflow` | the push touches a workflow file |
+| `Authentication failed` | the token expired or was revoked |
+
 ## Checks
 
 In your own terminal:
