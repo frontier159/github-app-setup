@@ -11,18 +11,20 @@ unset IFS
 
 # The agent acts as you, so its approvals count as yours. Refuse them here; this
 # is a speed bump, not a boundary. Flags may come before the subcommand.
-pr="" review="" api="" approve_flag="" approve_word="" input="" reviews="" prev=""
+pr="" review="" api="" approve_flag="" approve_word="" input="" at_field="" path_risky="" prev=""
 for a in "$@"; do
-  case $prev in -b|--body) prev=""; continue ;; esac
+  case $prev in -b|--body) prev=""; continue ;; -F|--field) case $a in *=@*) at_field=1 ;; esac ;; esac
   case $a in pr) pr=1 ;; review) review=1 ;; api) api=1 ;; esac
-  case $a in --approve*|-a*|-[!-]*a*) approve_flag=1 ;; esac
+  case $a in --approve*|-a*) approve_flag=1 ;; esac
   case $a in *APPROVE*) approve_word=1 ;; esac
   case $a in --input|--input=*) input=1 ;; esac
-  case $a in */reviews*) reviews=1 ;; esac
+  case $a in -F?*=@*|--field=*=@*) at_field=1 ;; esac
+  case $a in graphql|*/reviews*) path_risky=1 ;; esac
   prev=$a
 done
+# Under api, --input and @file fields would hide the request body from this check.
 if { [ -n "$pr" ] && [ -n "$review" ] && [ -n "$approve_flag" ]; } \
-   || { [ -n "$api" ] && { [ -n "$approve_word" ] || { [ -n "$input" ] && [ -n "$reviews" ]; }; }; }; then
+   || { [ -n "$api" ] && { [ -n "$approve_word" ] || [ -n "$input" ] || { [ -n "$at_field" ] && [ -n "$path_risky" ]; }; }; }; then
   echo "gh: agents do not approve PRs; leave a comment review instead" >&2; exit 1
 fi
 
