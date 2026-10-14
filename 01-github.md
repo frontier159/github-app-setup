@@ -45,6 +45,13 @@ pbcopy < /dev/null
 gh auth status
 ```
 
+If `gh auth status` lists more than one account, log out of each one
+you are not keeping:
+
+```zsh
+gh auth logout --hostname github.com --user <login>
+```
+
 Logging in with a token leaves the old browser login valid on GitHub.
 Revoke it: GitHub → **Settings → Applications → Authorized OAuth Apps
 → GitHub CLI → Revoke**.
@@ -63,13 +70,26 @@ reach. Find the others and remove what you do not need. These commands
 print names and counts, never a secret:
 
 ```zsh
-security find-internet-password -s github.com 2>/dev/null | grep '"acct"'
+security dump-keychain 2>/dev/null | grep -iE '"(svce|srvr)"<blob>=.*github'
 grep -c github.com ~/.git-credentials ~/.netrc 2>/dev/null
 grep -lE 'GH_TOKEN|GITHUB_TOKEN' ~/.zshenv ~/.zprofile ~/.zshrc ~/.zlogin ~/.bash_profile ~/.bashrc ~/.profile 2>/dev/null
+grep -rlE 'gh[pousr]_[A-Za-z0-9]{36}|github_pat_' ~/.npmrc ~/.docker ~/.config 2>/dev/null
+/usr/bin/jq -r '[.. | objects | .mcpServers? // empty | keys[]] | unique[]' ~/.claude.json 2>/dev/null
 ```
 
-- **A keychain entry** for `github.com` is a token git stored for HTTPS.
-  Delete it in Keychain Access.
+- **A keychain item** that names GitHub holds a token: one git stored
+  for HTTPS, or an app's, such as GitHub Desktop's. Delete the ones you
+  do not need in Keychain Access. `security` without `-d` prints item
+  names only.
+- **A file that holds a token**, such as `~/.npmrc` or
+  `~/.docker/config.json`. Remove the token, and revoke it if it is
+  classic. The agent's own tokens under `~/.config/agent-git/tokens`
+  match too, once step 02 has run.
+- **A GitHub MCP server or connector.** The last command lists the MCP
+  servers in `~/.claude.json` by name; also check claude.ai's
+  connectors. An MCP server runs outside the sandbox and the routing,
+  and often holds a classic token. Remove it, or give it a token made
+  by [The token recipe](#the-token-recipe).
 - **`~/.git-credentials` or `~/.netrc`** with a `github.com` line holds
   a token in plain text. Delete that line.
 - **A startup file that sets `GH_TOKEN` or `GITHUB_TOKEN`** hands that
@@ -122,7 +142,9 @@ Deliberately absent:
 - **Workflows.** The token cannot push a commit that touches
   `.github/workflows/*`. CI still runs scripts the agent can edit, such
   as `package.json` or a `Makefile`, so a workflow that holds secrets
-  should not run on agent branches without review.
+  should not run on agent branches without review. Contents write also
+  allows `repository_dispatch`, so a workflow on that event runs when
+  the agent asks.
 - **Commit statuses write.** The token cannot mark a required check as
   passed.
 - **Secrets, Variables, Environments, Deployments, Webhooks, Pages.**
@@ -168,8 +190,10 @@ To cut a release, do one of these:
 - Switch the tag ruleset to **Evaluate** in the browser, push the tag,
   then switch it back to **Active**.
 - Push tags from a workflow you start in the browser
-  (`workflow_dispatch`). Make the identity it pushes as the only bypass
-  actor.
+  (`workflow_dispatch`). Bypass actors can be roles, teams, GitHub Apps
+  or Dependabot. `GITHUB_TOKEN` and deploy keys cannot be one. So the
+  workflow must push the tag with a GitHub App's token, and that App is
+  the only bypass actor.
 
 Contents write also edits releases and their assets. Turn on immutable
 releases in the repo's Settings, so a published release cannot change.
