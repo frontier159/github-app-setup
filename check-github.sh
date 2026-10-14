@@ -40,7 +40,12 @@ for repo in $repos; do
   token=$(cat "$TOKENS/$owner")
   branch=$(api "$token" "repos/$repo" --jq .default_branch) || { fail "cannot read $repo: $(api_error)"; continue; }
   rules=$(api "$token" "repos/$repo/rules/branches/$branch") || { fail "cannot read the rules on $branch: $(api_error)"; continue; }
-  pr=$(printf '%s' "$rules" | "$JQ" -c '[.[] | select(.type == "pull_request") | .parameters] | first // empty')
+  # Several rulesets can each add a pull_request rule; GitHub enforces the strictest.
+  pr=$(printf '%s' "$rules" | "$JQ" -c '[.[] | select(.type == "pull_request") | .parameters]
+    | if length == 0 then empty else {
+        required_approving_review_count: (map(.required_approving_review_count // 0) | max),
+        require_last_push_approval: any(.[]; .require_last_push_approval == true),
+        dismiss_stale_reviews_on_push: any(.[]; .dismiss_stale_reviews_on_push == true) } end')
   if [ -n "$solo" ]; then warn "$branch: pull request checks skipped (--solo)"
   elif [ -z "$pr" ]; then fail "$branch: no pull request required"
   else
@@ -60,11 +65,11 @@ for repo in $repos; do
   for r in deletion non_fast_forward; do
     printf '%s' "$rules" | "$JQ" -e --arg r "$r" 'any(.[]; .type == $r)' >/dev/null && ok "$branch: $r blocked" || fail "$branch: $r not blocked"
   done
-  ids=$(api "$token" "repos/$repo/rulesets" --jq '.[] | select(.target == "tag" and .enforcement == "active") | .id') \
+  ids=$(api "$token" "repos/$repo/rulesets" --paginate --jq '.[] | select(.target == "tag" and .enforcement == "active") | .id') \
     || { fail "cannot list the rulesets on $repo: $(api_error)"; continue; }
   tag_rules=""
   for rid in $ids; do
-    if out=$(api "$token" "repos/$repo/rulesets/$rid" --jq '.name as $n | .rules[] | "\(.type) \($n)"'); then
+    if out=$(api "$token" "repos/$repo/rulesets/$rid" --jq '"\(.name) (\(.conditions.ref_name.include // [] | join(" ")))" as $n | .rules[] | "\(.type) \($n)"'); then
       tag_rules="$tag_rules$out
 "
     else fail "cannot read tag ruleset $rid: $(api_error)"; fi

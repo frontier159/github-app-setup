@@ -77,7 +77,7 @@ fi
 if [ $mode = install ]; then
   for o in $owners; do
     [ -s "$TOKENS/$o" ] && continue
-    [ -r /dev/tty ] || problem "no token stored for $o, and no terminal to paste one into; run the installer in a terminal"
+    ( : </dev/tty ) 2>/dev/null || problem "no token stored for $o, and no terminal to paste one into; run the installer in a terminal"
   done
 fi
 if [ $problems -gt 0 ]; then echo "Stopped: $problems problem(s) above. Nothing was changed." >&2; exit 1; fi
@@ -85,9 +85,9 @@ if [ $problems -gt 0 ]; then echo "Stopped: $problems problem(s) above. Nothing 
 # ---- token checks (install and --check) ------------------------------------
 # A fine-grained PAT, valid, not near expiry, able to see the owner's repos, refused admin.
 check_token() {
-  local owner=$1 f="$TOKENS/$1" token cfg headers login expiry expires days repo code
+  local owner=$1 f="$TOKENS/$1" token cfg headers login expiry expires days repo code out
   [ -s "$f" ] || { problem "$owner: no token at $(t "$f")"; return 1; }
-  [ "$(stat -f '%Lp' "$f")" = 600 ] || { problem "$owner: $(t "$f") must be mode 600"; return 1; }
+  [ "$(/usr/bin/stat -f '%Lp' "$f")" = 600 ] || { problem "$owner: $(t "$f") must be mode 600"; return 1; }
   token=$(cat "$f")
   case $token in
     github_pat_*) ;;
@@ -114,10 +114,17 @@ check_token() {
   if [ -z "$repo" ]; then
     note "$owner: the token sees none of $owner's repos; check its resource owner and repository access"
   else
-    # Deploy keys need Administration read; the token must have none.
-    code=$(GH_TOKEN=$token GH_CONFIG_DIR=$cfg command gh api "repos/$repo/keys" 2>&1 | grep -o 'HTTP [0-9]*' | head -1 || true)
-    [ "$code" = "HTTP 403" ] && ok "$owner: admin-only call refused (403 on $repo)" \
-      || problem "$owner: admin-only call on $repo gave '${code:-success}'; set Administration to No access"
+    # Deploy keys need Administration read; the token must have none. Only this message
+    # blames the token; another 403, such as "Must have admin rights", blames your role.
+    out=$(GH_TOKEN=$token GH_CONFIG_DIR=$cfg command gh api "repos/$repo/keys" 2>&1 >/dev/null || true)
+    code=$(printf '%s\n' "$out" | grep -o 'HTTP [0-9]*' | head -1 || true)
+    if printf '%s\n' "$out" | grep -q 'Resource not accessible by personal access token'; then
+      ok "$owner: admin-only call refused (403 on $repo)"
+    elif [ "$code" = "HTTP 403" ]; then
+      note "$owner: the admin probe on $repo was inconclusive (a 403 for another reason); check the token has Administration set to No access"
+    else
+      problem "$owner: admin-only call on $repo gave '${code:-success}'; set Administration to No access"
+    fi
   fi
   rm -rf "$cfg"
 }
@@ -131,9 +138,6 @@ verify() {
     [ "$(last_line "$f")" = "$SOURCE_LINE" ] && ok "$(basename "$f") ends with the source line" \
       || problem "$(basename "$f") does not end with the source line; rerun install"
   done
-  # A token your own login shell exports reaches agent shells until env.sh clears it.
-  env -i HOME="$HOME" "$SHELL" -lc '[ -n "${GH_TOKEN:-}${GITHUB_TOKEN:-}" ]' >/dev/null 2>&1 \
-    && note "your login shell exports GH_TOKEN or GITHUB_TOKEN; env.sh clears it for the agent, but revoke it if it can administer"
   [ -n "${owners// /}" ] || problem "no tokens stored in $(t "$TOKENS")"
   for o in $owners; do check_token "$o" || true; done
   echo "Steps 03 and 04 (advisory)"
@@ -149,6 +153,7 @@ if [ $mode = check ]; then verify && exit 0 || exit 1; fi
 
 # ---- plan and confirm ------------------------------------------------------
 state() { [ -e "$1" ] && echo "overwrite" || echo "create"; }
+backup() { [ -e "$1.agent-bak" ] && echo "keeps the first backup, $(t "$1").agent-bak" || echo "backup $(t "$1").agent-bak"; }
 echo
 echo "Plan"
 for o in $owners; do
@@ -163,9 +168,9 @@ for f in $(startup_files); do
   if [ "$(last_line "$f")" = "$SOURCE_LINE" ]; then echo "  keep    $(t "$f")   (already ends with the source line)"
   elif new_bash_profile "$f"; then echo "  create  $(t "$f")   (sources ~/.profile, then the source line)"
   elif [ ! -f "$f" ]; then echo "  create  $(t "$f")   (the source line only)"
-  elif grep -aqxF "$OLD_SOURCE_LINE" "$f"; then echo "  replace the old source line in $(t "$f"), at the end   (backup $(t "$f").agent-bak)"
-  elif grep -aqxF "$SOURCE_LINE" "$f"; then echo "  move    the source line to the end of $(t "$f")   (backup $(t "$f").agent-bak)"
-  else echo "  append  the source line to $(t "$f")   (backup $(t "$f").agent-bak)"; fi
+  elif grep -aqxF "$OLD_SOURCE_LINE" "$f"; then echo "  replace the old source line in $(t "$f"), at the end   ($(backup "$f"))"
+  elif grep -aqxF "$SOURCE_LINE" "$f"; then echo "  move    the source line to the end of $(t "$f")   ($(backup "$f"))"
+  else echo "  append  the source line to $(t "$f")   ($(backup "$f"))"; fi
 done
 echo "  source line: $SOURCE_LINE"
 echo "Nothing else changes. Your ~/.gitconfig, ~/.ssh and own gh login are not touched."
@@ -230,7 +235,7 @@ for f in $(startup_files); do
   [ "$(last_line "$f")" = "$SOURCE_LINE" ] && continue
   tmp=$(mktemp)
   if [ -f "$f" ]; then
-    cp -p "$f" "$f.agent-bak"
+    [ -e "$f.agent-bak" ] || cp -p "$f" "$f.agent-bak"
     grep -avxF -e "$SOURCE_LINE" -e "$OLD_SOURCE_LINE" "$f" > "$tmp" || true
   elif new_bash_profile "$f"; then
     printf '%s\n' "$PROFILE_LINE" > "$tmp"
