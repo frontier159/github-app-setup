@@ -10,20 +10,29 @@ unset IFS
 [ -n "$real_gh" ] || { echo "gh: real gh not found on PATH" >&2; exit 127; }
 
 # The agent acts as you, so its approvals count as yours. Refuse them here; this
-# is a speed bump, not a boundary.
-case "${1:-} ${2:-}" in
-  "pr review") for a in "$@"; do case $a in -a|--approve) echo "gh: agents do not approve PRs; leave a comment review instead" >&2; exit 1 ;; esac; done ;;
-  "api "*) for a in "$@"; do case $a in *APPROVE*) echo "gh: agents do not approve PRs; leave a comment review instead" >&2; exit 1 ;; esac; done ;;
-esac
+# is a speed bump, not a boundary. Flags may come before the subcommand.
+pr="" review="" api="" approve_flag="" approve_word="" input="" reviews="" prev=""
+for a in "$@"; do
+  case $prev in -b|--body) prev=""; continue ;; esac
+  case $a in pr) pr=1 ;; review) review=1 ;; api) api=1 ;; esac
+  case $a in --approve*|-a*|-[!-]*a*) approve_flag=1 ;; esac
+  case $a in *APPROVE*) approve_word=1 ;; esac
+  case $a in --input|--input=*) input=1 ;; esac
+  case $a in */reviews*) reviews=1 ;; esac
+  prev=$a
+done
+if { [ -n "$pr" ] && [ -n "$review" ] && [ -n "$approve_flag" ]; } \
+   || { [ -n "$api" ] && { [ -n "$approve_word" ] || { [ -n "$input" ] && [ -n "$reviews" ]; }; }; }; then
+  echo "gh: agents do not approve PRs; leave a comment review instead" >&2; exit 1
+fi
 
 if [ -z "${GH_TOKEN:-}" ]; then
   owner="" prev=""
   for a in "$@"; do
-    case $prev in -R|--repo) owner=${a%%/*} ;; esac
-    case $a in
-      --repo=*) o=${a#--repo=}; owner=${o%%/*} ;;
-      -R?*) o=${a#-R}; owner=${o%%/*} ;;
-    esac
+    o=""
+    case $prev in -R|--repo) o=$a ;; esac
+    case $a in --repo=*) o=${a#--repo=} ;; -R?*) o=${a#-R} ;; esac
+    if [ -n "$o" ]; then o=${o#https://}; o=${o#github.com/}; owner=${o%%/*}; fi
     prev=$a
   done
   if [ -z "$owner" ]; then

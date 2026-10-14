@@ -23,11 +23,12 @@ trap cleanup EXIT
 # Echo goes off before the prompt appears, so nothing typed early is shown.
 stty -echo </dev/tty
 printf 'Bitwarden master password: ' >&2
-read -r password </dev/tty
+IFS= read -r password </dev/tty
 stty echo </dev/tty
 echo >&2
-# The password and session key travel in the environment, never in argv.
-session=$(BW_PASSWORD=$password bw unlock --passwordenv BW_PASSWORD --raw) || die "vault not unlocked"
+# The password reaches bw through a file descriptor: never argv, never the environment,
+# which same-user processes can read with ps -E. printf is a builtin, so no argv either.
+session=$(bw unlock --passwordfile <(printf '%s' "$password") --raw) || die "vault not unlocked"
 unset password
 token=$(BW_SESSION=$session bw get password "$ITEM") \
   || die "no single vault item named $ITEM; create it, or run bw sync"
