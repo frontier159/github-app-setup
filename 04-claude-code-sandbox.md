@@ -75,11 +75,13 @@ Notes:
 - `allowUnsandboxedCommands: false` removes the "run this outside the
   sandbox" escape. If a tool needs more, add a path or domain instead of
   flipping this.
-- `allowLocalBinding` is left off. Set it to `true` if the agent runs
-  local dev servers. The cost: sandboxed commands can then reach any
-  service on localhost, such as a `bw serve` you started.
+- `allowLocalBinding` is left off in the fragment, so local dev
+  servers cannot bind a port. [Step 05](05-living-with-the-sandbox.md#local-dev-servers)
+  covers turning it on, and its cost.
 - `excludedCommands` is not used. Anything listed there runs with full
   access, which would undo the point for `git` or `gh`.
+- For day-to-day friction after this step, such as worktrees, package
+  installs and browsers, see [step 05](05-living-with-the-sandbox.md).
 
 Precedence: deny rules merge across scopes and always win, so a
 project cannot remove these. The rest of the sandbox block is weaker.
@@ -121,7 +123,7 @@ cat ~/.config/gh/hosts.yml                   # denied
 ssh -T git@github.com                        # denied or fails to connect
 git ls-remote origin HEAD                    # a sha (HTTPS, agent token)
 gh api user --jq .login                      # your login, via the agent token
-git commit --allow-empty -S -m "sandbox signing test" && git log --show-signature -1
+git commit --allow-empty -S -m "sandbox signing test"
 BUILD_COMMAND                                # your repo's normal build or check
 ```
 
@@ -130,8 +132,10 @@ Then the edit check. Ask the agent to create
 deny rule must refuse it. If the file appears, delete it: that session
 ignores the `Edit(...)` rules.
 
-The signing line must show a good signature. Then switch back and
-delete the scratch branch with `git branch -D zz-sandbox-test`.
+The signing line must succeed. gpg cannot verify inside the sandbox,
+so run `git log --show-signature -1` in your own terminal, in the same
+checkout: it must show a good signature. Then switch back and delete
+the scratch branch with `git branch -D zz-sandbox-test`.
 Signing needs only the agent socket: a signed commit succeeded with
 every write to `~/.gnupg` blocked.
 

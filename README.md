@@ -37,7 +37,8 @@ Then:
 
 4. Run step 02's checks in an agent session, then do
    [step 03](03-ssh-key-to-password-manager.md) and
-   [step 04](04-claude-code-sandbox.md).
+   [step 04](04-claude-code-sandbox.md). Read [step 05](05-living-with-the-sandbox.md)
+   when the sandbox gets in the way.
 5. Run `./install.sh --check` at any time to see where you stand, and
    `./check-github.sh --repo OWNER/REPO` to check a repo's rules.
 
@@ -207,6 +208,7 @@ current repo owner's token and exports it as `GH_TOKEN`.
 | 02 | [02-agent-routing.md](02-agent-routing.md) | Runs [`install.sh`](install.sh): stores the tokens, writes the agent gitconfig, env file and `gh` shim, verifies each token | yes | 10 min |
 | 03 | [03-ssh-key-to-password-manager.md](03-ssh-key-to-password-manager.md) | Imports your SSH key into Bitwarden, enables its SSH agent, deletes the key file | recommended | 30 min |
 | 04 | [04-claude-code-sandbox.md](04-claude-code-sandbox.md) | Turns on Claude Code's sandbox with reads of `~/.ssh` and agent sockets denied | recommended | 10 min |
+| 05 | [05-living-with-the-sandbox.md](05-living-with-the-sandbox.md) | Fixes for common sandbox blocks, and a loop that logs them for review | recommended | 15 min reading |
 
 Finish and check [01](01-github.md) and [02](02-agent-routing.md)
 before [03](03-ssh-key-to-password-manager.md) and
@@ -268,5 +270,9 @@ counterpart.
   runs one admin command with a token kept in Bitwarden.
 - [`files/`](files/) holds the `gh` shim, the credential helper, `ssh-who`,
   `gh-admin`, and the Claude Code settings fragment for
-  [step 04](04-claude-code-sandbox.md#settings).
+  [step 04](04-claude-code-sandbox.md#settings). It also holds `git-pat`,
+  a git wrapper for editors from
+  [step 03](03-ssh-key-to-password-manager.md#when-a-prompt-appears-that-you-did-not-expect),
+  and, for [step 05](05-living-with-the-sandbox.md#the-friction-loop),
+  `claude-md-agent-rules.md` and `skills/sandbox-triage`.
 - Commands work in zsh and bash. No `sudo`.
