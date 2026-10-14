@@ -228,6 +228,8 @@ unset GH_TOKEN GITHUB_TOKEN GIT_ASKPASS SSH_ASKPASS
 export GIT_TERMINAL_PROMPT=0
 # gh verifies TLS through a macOS service the sandbox blocks; the bundled roots avoid it.
 export SSL_CERT_FILE=/etc/ssl/cert.pem
+# npm caches in ~/.npm, which the sandbox does not let it write.
+export npm_config_cache="\${TMPDIR:-/tmp}/npm-cache"
 # Claude Code resets PATH from its shell snapshot after startup files run;
 # a function survives that, so plain gh still reaches the shim.
 gh() { "\$HOME/.config/agent-gh/bin/gh" "\$@"; }
