@@ -31,8 +31,9 @@ gh auth status
 
 - **`Token: gho_…`** is a browser OAuth login. It can create and delete
   repos. Replace it.
-- **`Token: github_pat_…`** is already a fine-grained PAT. If its
-  Administration permission is No access, keep it.
+- **`Token: github_pat_…`** is already a fine-grained PAT. Keep it only
+  if it matches [The token recipe](#the-token-recipe): no Administration,
+  and no Workflows, Secrets or Webhooks write. Otherwise replace it.
 
 To replace it, create a token as in [The token
 recipe](#the-token-recipe) for the owner you use `gh` with most, then
@@ -44,15 +45,46 @@ pbcopy < /dev/null
 gh auth status
 ```
 
+Logging in with a token leaves the old browser login valid on GitHub.
+Revoke it: GitHub → **Settings → Applications → Authorized OAuth Apps
+→ GitHub CLI → Revoke**.
+
+A PAT covers one owner, so your own `gh` stops working on every other
+owner. Use the browser or `gh-admin` there.
+
 Admin work then goes in the browser, or through
 [`gh-admin`](elevated-gh-access.md), which keeps a stronger token
 locked in Bitwarden and uses it for one command at a time.
+
+## Find other GitHub credentials
+
+Your `gh` login is not the only GitHub credential the agent could
+reach. Find the others and remove what you do not need. These commands
+print names and counts, never a secret:
+
+```zsh
+security find-internet-password -s github.com 2>/dev/null | grep '"acct"'
+grep -c github.com ~/.git-credentials ~/.netrc 2>/dev/null
+grep -lE 'GH_TOKEN|GITHUB_TOKEN' ~/.zshenv ~/.zprofile ~/.zshrc ~/.zlogin ~/.bash_profile ~/.bashrc ~/.profile 2>/dev/null
+```
+
+- **A keychain entry** for `github.com` is a token git stored for HTTPS.
+  Delete it in Keychain Access.
+- **`~/.git-credentials` or `~/.netrc`** with a `github.com` line holds
+  a token in plain text. Delete that line.
+- **A startup file that sets `GH_TOKEN` or `GITHUB_TOKEN`** hands that
+  token to every shell. Remove the line and revoke the token. The
+  agent's env file clears both, but a bypass still finds the file.
+- **Old tokens and grants** stay live until you revoke them. Review
+  [github.com/settings/tokens](https://github.com/settings/tokens) and
+  [github.com/settings/applications](https://github.com/settings/applications).
+  A classic token reaches every repo you can reach.
 
 ## Create the agent's token for each owner
 
 Create one PAT per owner the agent works in, such as `ExampleOrg` and
 `alice`, following the recipe below. Name each one so you can tell it
-apart, for example `agent – ExampleOrg`. Keep them separate from your
+apart, for example `agent-ExampleOrg`. Keep them separate from your
 own login's token, so you can revoke the agent's without touching
 yours.
 
@@ -80,6 +112,8 @@ Repository permissions (everything else stays No access):
 | Actions | Read | inspect runs and logs |
 | Commit statuses | Read | see CI results |
 | Metadata | Read | mandatory, auto-selected |
+
+Organization permissions and Account permissions: all No access.
 
 Deliberately absent:
 
@@ -125,8 +159,20 @@ Rules to tick:
 Add a **tag ruleset** too. Contents write includes creating and moving
 tags, so without one the agent can cut a release in any repo that
 builds from tag pushes. Target `v*`, or your release tag pattern. Tick
-Restrict creations, Restrict updates and Restrict deletions, and let
-only a team of release managers bypass it.
+Restrict creations, Restrict updates and Restrict deletions. Leave the
+bypass list **empty**, for the same reason as branches. Never add a
+team or role you belong to.
+
+To cut a release, do one of these:
+
+- Switch the tag ruleset to **Evaluate** in the browser, push the tag,
+  then switch it back to **Active**.
+- Push tags from a workflow you start in the browser
+  (`workflow_dispatch`). Make the identity it pushes as the only bypass
+  actor.
+
+Contents write also edits releases and their assets. Turn on immutable
+releases in the repo's Settings, so a published release cannot change.
 
 On a repo only you work on, a required approval would block you, since
 the agent's PRs are yours. There, keep deletion, force-push and tag
@@ -149,8 +195,12 @@ After [step 02](02-agent-routing.md) has stored the tokens:
 fine-grained PAT, that GitHub accepts it, how long until it expires,
 and that an admin-only call is refused. `check-github.sh` checks each
 `--repo`'s default branch rules and tag rules against
-[Rulesets](#rulesets). Repeat `--repo` for each repo you protect. Both
-change nothing, print no token, and exit non-zero on a problem.
+[Rulesets](#rulesets). Repeat `--repo` for each repo you protect. Add
+`--solo` for repos only you work on; it skips the pull request checks.
+Both change nothing, print no token, and exit non-zero on a problem.
+
+`check-github.sh` cannot see bypass lists with these tokens. Check them
+in the browser.
 
 ## Rollback
 
