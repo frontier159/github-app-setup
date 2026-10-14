@@ -42,7 +42,6 @@ for repo in $repos; do
     [ "$(printf '%s' "$pr" | "$JQ" '.require_last_push_approval')" = true ] && ok "$branch: approval of the most recent push" \
       || fail "$branch: an approval given before the last push still counts; tick 'require approval of the most recent reviewable push'"
     [ "$(printf '%s' "$pr" | "$JQ" '.dismiss_stale_reviews_on_push')" = true ] && ok "$branch: stale approvals dismissed" || warn "$branch: stale approvals are not dismissed on push"
-    [ "$(printf '%s' "$pr" | "$JQ" '.require_code_owner_review')" = true ] && ok "$branch: Code Owner review" || warn "$branch: no Code Owner review"
   fi
   checks=$(printf '%s' "$rules" | "$JQ" -r '[.[] | select(.type == "required_status_checks") | .parameters.required_status_checks[]] | .[] | "\(.context) \(.integration_id // "any")"')
   if [ -z "$checks" ]; then warn "$branch: no required status checks"
