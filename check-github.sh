@@ -39,7 +39,8 @@ for repo in $repos; do
   [ -s "$TOKENS/$owner" ] || { fail "no agent token for $owner in ${TOKENS/#$HOME/~}; run install.sh"; continue; }
   token=$(cat "$TOKENS/$owner")
   branch=$(api "$token" "repos/$repo" --jq .default_branch) || { fail "cannot read $repo: $(api_error)"; continue; }
-  rules=$(api "$token" "repos/$repo/rules/branches/$branch") || { fail "cannot read the rules on $branch: $(api_error)"; continue; }
+  rules=$(api "$token" "repos/$repo/rules/branches/$branch" --paginate --slurp) || { fail "cannot read the rules on $branch: $(api_error)"; continue; }
+  rules=$(printf '%s' "$rules" | "$JQ" -c 'add // []')
   # Several rulesets can each add a pull_request rule; GitHub enforces the strictest.
   pr=$(printf '%s' "$rules" | "$JQ" -c '[.[] | select(.type == "pull_request") | .parameters]
     | if length == 0 then empty else {
@@ -54,11 +55,13 @@ for repo in $repos; do
       || fail "$branch: an approval given before the last push still counts; tick 'require approval of the most recent reviewable push'"
     [ "$(printf '%s' "$pr" | "$JQ" '.dismiss_stale_reviews_on_push')" = true ] && ok "$branch: stale approvals dismissed" || warn "$branch: stale approvals are not dismissed on push"
   fi
-  checks=$(printf '%s' "$rules" | "$JQ" -r '[.[] | select(.type == "required_status_checks") | .parameters.required_status_checks[]] | .[] | "\(.integration_id // "any") \(.context)"')
+  # Rulesets stack, so a context is held to GitHub Actions when any rule requires that source.
+  checks=$(printf '%s' "$rules" | "$JQ" -r --argjson app "$GITHUB_ACTIONS_APP_ID" '[.[] | select(.type == "required_status_checks") | .parameters.required_status_checks[]]
+    | group_by(.context)[] | "\(any(.[]; .integration_id == $app)) \(.[0].context)"')
   if [ -z "$checks" ]; then warn "$branch: no required status checks"
   else
-    while read -r source context; do
-      [ "$source" = "$GITHUB_ACTIONS_APP_ID" ] && ok "$branch: check '$context' must come from GitHub Actions" \
+    while read -r actions context; do
+      [ "$actions" = true ] && ok "$branch: check '$context' must come from GitHub Actions" \
         || fail "$branch: check '$context' accepts any source; set its source to GitHub Actions"
     done <<< "$checks"
   fi

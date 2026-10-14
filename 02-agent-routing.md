@@ -82,8 +82,8 @@ Read the helper before you run the installer.
 The installer runs in three stages:
 
 1. **Preflight.** It checks macOS, a zsh or bash login shell, git 2.32
-   or newer, `gh` on `PATH`, and that `~/.gitconfig` does not rewrite
-   GitHub HTTPS to SSH. Any failure stops it with the reason and the
+   or newer, `gh` on `PATH`, and that neither `~/.config/git/config`
+   nor `~/.gitconfig` rewrites GitHub HTTPS to SSH. Any failure stops it with the reason and the
    fix, and nothing is changed.
 2. **Plan.** It prints every file it will create or overwrite, which
    tokens it will ask for, and each startup-file line it will add or
@@ -108,7 +108,7 @@ and [step 04](04-claude-code-sandbox.md) look done.
 | Path | What it is |
 |---|---|
 | `~/.config/agent-git/tokens/<owner>` | One token per owner, mode 600, in a folder only you can read |
-| `~/.config/agent-git/gitconfig` | The agent's global gitconfig. It includes your `~/.gitconfig`, clears inherited credential helpers, adds the agent's helper, and rewrites SSH remotes to HTTPS |
+| `~/.config/agent-git/gitconfig` | The agent's global gitconfig. It includes your `~/.config/git/config` and `~/.gitconfig`, clears inherited credential helpers, adds the agent's helper, and rewrites SSH remotes to HTTPS |
 | `~/.config/agent-git/env.sh` | Sets `GIT_CONFIG_GLOBAL`, `GH_CONFIG_DIR` and the default owner, puts the shim dir first on `PATH`, and defines a `gh` function that calls the shim. Clears inherited GitHub tokens (`GH_TOKEN`, `GITHUB_TOKEN`), askpass programs and `SSH_AUTH_SOCK`, and turns off git's terminal prompt |
 | `~/.config/agent-git/bin/git-credential-agent` | The [credential helper](#the-credential-helper), from `files/` |
 | `~/.config/agent-gh/bin/gh` | The [`gh` shim](files/gh). It finds the repo owner, gets that owner's token from git and exports it as `GH_TOKEN`, then runs the real `gh` |
@@ -163,7 +163,9 @@ the source line can undo the unset.
 
 Everything the agent does is recorded as you: commits, pushes, PRs,
 comments and reviews. Commit author and committer come from
-`user.name` and `user.email` in the included `~/.gitconfig`.
+`user.name` and `user.email` in your own git config. The agent's
+gitconfig includes both `~/.config/git/config` and `~/.gitconfig`, in
+git's own order, so identity and signing set in either one carry over.
 
 GPG signing keeps working: agent commits stay signed with your key.
 SSH signing (`gpg.format=ssh`) does not. Agent shells have no SSH
