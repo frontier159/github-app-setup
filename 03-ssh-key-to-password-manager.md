@@ -63,9 +63,16 @@ The Bitwarden item becomes the key's home and its backup. The vault
 encrypts it and syncs it to your other devices, so you need no separate
 copy on disk.
 
-Bitwarden accepts OpenSSH and PKCS#8 formats. If the format line said
-`OPENSSH PRIVATE KEY` and the key has no passphrase, skip to the next
-paragraph and copy straight from `~/.ssh/id_rsa`.
+Bitwarden accepts OpenSSH and PKCS#8 formats. This tells you whether
+the key has a passphrase:
+
+```zsh
+ssh-keygen -y -P "" -f ~/.ssh/id_rsa >/dev/null 2>&1 && echo "no passphrase" || echo "has a passphrase"
+```
+
+If the format line said `OPENSSH PRIVATE KEY` and the key has no
+passphrase, skip to **In the Bitwarden desktop app** below and copy
+straight from `~/.ssh/id_rsa`.
 
 Only if the format line said `RSA PRIVATE KEY`, or the key has a
 passphrase, make an unencrypted OpenSSH copy in a private temporary
@@ -145,6 +152,19 @@ If `ssh -T` fails, `ssh -vT git@github.com 2>&1 | grep -i 'agent\|Offering'`
 shows whether the agent was reached.
 
 ## Remove the file
+
+macOS runs its own SSH agent, which may still hold the key from
+earlier use. Its socket stays reachable after the file is gone. Clear
+it, then check:
+
+```zsh
+SSH_AUTH_SOCK=$(launchctl getenv SSH_AUTH_SOCK) ssh-add -D
+SSH_AUTH_SOCK=$(launchctl getenv SSH_AUTH_SOCK) ssh-add -l
+```
+
+The second line must print `The agent has no identities.` If
+`~/.ssh/config` has `UseKeychain` or `AddKeysToAgent` lines for this
+key, remove them.
 
 Once GitHub and your servers work through the agent:
 

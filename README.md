@@ -19,9 +19,9 @@ You need:
 
 Then:
 
-1. Clone this repo, check out the latest release tag, and `cd` into it.
-   The installer runs from the repo root. Read `install.sh` before you
-   run it: it edits your shell startup files.
+1. Clone this repo and check out the latest release tag, v0.2.0 or
+   later. Read `install.sh` before you run it: it edits your shell
+   startup files.
 2. Do [step 01](01-github.md) in the browser. You end with one
    restricted fine-grained token per owner, and rulesets on the repos
    that matter.
@@ -39,6 +39,22 @@ Then:
    `./check-github.sh --repo <owner/repo>` to check a repo's rules.
 
 The rest of this page explains the model and why it is built this way.
+
+## Upgrading from v0.1.0 (GitHub App)
+
+v0.1.0 gave the agent a GitHub App. This version uses your own
+restricted PATs instead. To move over:
+
+1. Do [step 01](01-github.md), then rerun the installer with your
+   `--owner` flags. It replaces the old source line.
+2. Delete the App's key and helper, if present:
+
+   ```zsh
+   rm -f ~/.config/agent-git/app.pem ~/.config/agent-git/bin/git-credential-github-app
+   ```
+
+3. Uninstall the App from each org and account, then delete it.
+4. Once its open PRs are merged, unassign its CodeRabbit seat.
 
 ## The problem
 
@@ -116,8 +132,8 @@ flowchart TB
   fine-grained PAT with Administration, Workflows and Secrets set to No
   access. An admin call fails with 403 whatever happens on your machine.
 - **Nothing stronger is lying around.** Your own `gh` login is
-  restricted too, and your SSH key lives in your password manager
-  instead of a file. If the agent steps around its routing, it finds
+  restricted too, step 01 has you remove other GitHub credentials, and
+  your SSH key lives in your password manager instead of a file. If the agent steps around its routing, it finds
   nothing more powerful.
 - **Admin work needs you.** The strong token sits in Bitwarden behind
   your master password and comes out for one command at a time.
@@ -129,8 +145,9 @@ flowchart TB
 - **One identity.** The agent works as you, so CodeRabbit and similar
   tools bill one seat, nothing needs installing per org, and the agent's
   PRs are yours: GitHub will not let you approve them yourself.
-- **Your workflow is unchanged.** Same remotes, same `gh`, same SSH key,
-  one `SSH_AUTH_SOCK` line.
+- **Your workflow barely changes.** Same remotes. Your `gh` login
+  becomes a restricted PAT for one owner. Your SSH key moves to your
+  password manager, which prompts for each use.
 - **The agent's workflow is unchanged.** `git push`, `gh pr create`,
   `gh pr view` and PR comments all work.
 - **One mechanism for CLI and Desktop,** and one token per owner.
@@ -229,7 +246,8 @@ counterpart.
   `~/.config/agent-gh/`, including one token file per owner. The
   installer writes them; [step 02](02-agent-routing.md#what-it-writes)
   lists each one. Outside those directories it adds one source line to
-  two startup files and touches nothing else of yours.
+  two startup files, keeps a `.agent-bak` copy of each, and touches
+  nothing else of yours.
 - [Elevated `gh` access](elevated-gh-access.md) is optional: `gh-admin`
   runs one admin command with a token kept in Bitwarden.
 - [`files/`](files/) holds the `gh` shim, the credential helper,

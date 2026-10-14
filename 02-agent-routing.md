@@ -59,13 +59,13 @@ tokens. These make one less likely, but none is a boundary:
 [`files/git-credential-agent`](files/git-credential-agent) is about 25
 lines. When git needs a password for `github.com`, it takes the repo's
 owner from the path git asks about and returns the token stored in
-`~/.config/agent-git/tokens/<owner>`. Any other host, or an owner with
-no token file, gets nothing, so git fails instead of falling back to
-another credential. Read it before you run the installer.
+`~/.config/agent-git/tokens/<owner>`. It answers only over https. Any
+other protocol or host, or an owner with no token file, gets nothing.
+git then fails: it cannot fall back to another credential, because the
+env file turns off askpass and terminal prompts. Read the helper before
+you run the installer.
 
 ## Run the installer
-
-From the root of this repo:
 
 ```bash
 ./install.sh --owner ExampleOrg --owner alice --default-owner ExampleOrg
@@ -90,8 +90,9 @@ The installer runs in three stages:
    GitHub accepts it, how long until it expires, and that an admin-only
    call is refused.
 
-Rerun it to add an owner. A rerun keeps stored tokens, rewrites its own
-files and changes nothing else. To replace a token, delete its file and
+To add an owner, rerun it with every owner, the new one included, and
+the same `--default-owner`. A rerun keeps stored tokens, rewrites its
+own files and changes nothing else. To replace a token, delete its file and
 rerun.
 
 `./install.sh --check` repeats the verification without changing
@@ -104,14 +105,17 @@ and [step 04](04-claude-code-sandbox.md) look done.
 |---|---|
 | `~/.config/agent-git/tokens/<owner>` | One token per owner, mode 600, in a folder only you can read |
 | `~/.config/agent-git/gitconfig` | The agent's global gitconfig. It includes your `~/.gitconfig`, clears inherited credential helpers, adds the agent's helper, and rewrites SSH remotes to HTTPS |
-| `~/.config/agent-git/env.sh` | Sets `GIT_CONFIG_GLOBAL`, `GH_CONFIG_DIR` and the default owner, defines a `gh` function that calls the shim, unsets `SSH_AUTH_SOCK` |
+| `~/.config/agent-git/env.sh` | Sets `GIT_CONFIG_GLOBAL`, `GH_CONFIG_DIR` and the default owner, puts the shim dir first on `PATH`, and defines a `gh` function that calls the shim. Clears inherited GitHub tokens (`GH_TOKEN`, `GITHUB_TOKEN`), askpass programs and `SSH_AUTH_SOCK`, and turns off git's terminal prompt |
 | `~/.config/agent-git/bin/git-credential-agent` | The [credential helper](#the-credential-helper), from `files/` |
 | `~/.config/agent-gh/bin/gh` | The [`gh` shim](files/gh). It finds the repo owner, gets that owner's token from git and exports it as `GH_TOKEN`, then runs the real `gh` |
 | the source line, at the end of two startup files | Loads `env.sh` only when `CLAUDECODE` is set |
 
 The startup files are `~/.zshenv` and `~/.zprofile` for zsh, and
-`~/.bash_profile` and `~/.bashrc` for bash. Your `~/.gitconfig`,
-`~/.ssh` and own `gh` login are never touched.
+`~/.bash_profile` and `~/.bashrc` for bash. Before it changes one, the
+installer copies it to `<file>.agent-bak`. Login bash stops reading
+`~/.profile` once `~/.bash_profile` exists. So if you have only
+`~/.profile`, the new `~/.bash_profile` sources it first. Your
+`~/.gitconfig`, `~/.ssh` and own `gh` login are never touched.
 
 The tokens expire on the date you set in step 01. `--check` warns two
 weeks ahead. Replace a token by creating a new one, deleting the old
@@ -172,18 +176,20 @@ them in a CLI session and in a Desktop session, inside a checkout of
 | Check | Command | Expect |
 |---|---|---|
 | Env | `echo $GIT_CONFIG_GLOBAL $GH_CONFIG_DIR ${SSH_AUTH_SOCK:-nosock}` | agent paths, `nosock` |
-| Shim used | `type gh` | `gh is a shell function` |
-| Fetch | `git ls-remote --heads origin stage \| head -1` | a sha |
+| Shim used | `type gh` | `gh is a shell function` (zsh) or `gh is a function` (bash) |
+| Fetch | `git ls-remote origin HEAD` | a sha |
 | Transport | `GIT_TRACE=1 git ls-remote origin HEAD 2>&1 \| grep -m1 -o 'https://github.com[^ ]*'` | an https URL |
 | Token used | `gh api user --jq .login` | your login |
-| Admin blocked | `gh api repos/ExampleOrg/repo/hooks 2>&1 \| grep -o 'HTTP 403'` | `HTTP 403` |
+| Admin blocked | `gh api repos/ExampleOrg/repo/keys 2>&1 \| grep -o 'HTTP 403'` | `HTTP 403` |
 | Approval blocked | `gh pr review 1 --approve` | refused by the shim |
 | Feature push | `git push origin HEAD:refs/heads/zz-agent-test && git push origin --delete zz-agent-test` | both succeed |
 | PR | `gh pr list --limit 1` | works |
+| PR checks | `gh pr checks <n>`, for an open PR | its CI results |
+| CI runs | `gh run list --limit 1` | the latest workflow run |
 | Personal owner | `git ls-remote git@github.com:alice/<repo>.git HEAD` | a sha |
 | Workflow file | push a branch that touches `.github/workflows/x.yml` | rejected: the token lacks Workflows |
 
-The admin check reads a repo's webhooks, which needs Administration.
+The admin check reads a repo's deploy keys, which needs Administration.
 It changes nothing even if the token were wrongly allowed.
 
 In your own terminal, in the same checkout: `git fetch` still uses SSH.

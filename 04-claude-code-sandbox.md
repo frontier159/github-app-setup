@@ -45,6 +45,8 @@ Notes:
   approve the registries and RPC endpoints your repos reach.
 - `allowUnixSockets` lists only the GPG agent socket. The agent signs
   commits with your GPG key, as it does today; commits stay yours.
+  The same socket also lets the agent decrypt anything encrypted to
+  your key.
 - `Bash(security *)` and `Bash(git credential-osxkeychain *)` are speed
   bumps, not a boundary. See [Known limits](#known-limits).
 - `allowUnsandboxedCommands: false` removes the "run this outside the
@@ -70,17 +72,18 @@ these.
 
 ## Checks
 
-Start a new session in the CLI and in Desktop. Ask the agent to run
-each line and report the result:
+Start a new session in the CLI and in Desktop, inside a scratch
+checkout of one of your repos. The sandbox confines writes to the
+session's working directory, so the signing line needs the session to
+start there. Ask the agent to run each line and report the result:
 
 ```zsh
 ls ~/.ssh                                    # permission denied
 cat ~/.config/gh/hosts.yml                   # denied
 ssh -T git@github.com                        # denied or fails to connect
-git -C ~/git/<repo> ls-remote --heads origin stage | head -1   # works (HTTPS, agent token)
-gh api user --jq .login                                         # your login, via the agent token
-security find-generic-password -s gh:github.com -w >/dev/null && echo READABLE
-git -C ~/git/<repo> commit --allow-empty -S -m "sandbox signing test" && git -C ~/git/<repo> log --show-signature -1
+git ls-remote origin HEAD                    # a sha (HTTPS, agent token)
+gh api user --jq .login                      # your login, via the agent token
+git commit --allow-empty -S -m "sandbox signing test" && git log --show-signature -1
 <your repo's normal build or check command>
 ```
 
@@ -88,9 +91,6 @@ The signing line must show a good signature. Run it on a scratch
 branch and drop the commit with `git reset --hard HEAD~1`. Signing
 needs only the agent socket: a signed commit succeeded with every write
 to `~/.gnupg` blocked.
-
-The `security` line must not print the token itself. If it prints
-`READABLE`, the [keychain limit](#known-limits) applies to you.
 
 ## Rollback
 
