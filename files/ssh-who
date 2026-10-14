@@ -1,0 +1,43 @@
+#!/bin/bash
+# Shows what started each running ssh process: the host it connects to, its
+# working folder, the chain of parent processes, and the app at the top.
+# Run it in your own terminal while a password-manager SSH prompt is open.
+# Bash 3.2 compatible.
+#
+#   ssh-who            report now, or wait up to 60 s for an ssh to start
+#   ssh-who --wait N   wait up to N seconds
+set -euo pipefail
+
+wait_secs=60
+case ${1:-} in
+  --wait) wait_secs=${2:?--wait needs a number of seconds} ;;
+  "") ;;
+  *) sed -n '7,8p' "$0" | sed 's/^# *//' >&2; exit 2 ;;
+esac
+
+pids=""
+deadline=$(( $(date +%s) + wait_secs ))
+while :; do
+  pids=$(pgrep -x ssh || true)
+  [ -n "$pids" ] && break
+  [ "$(date +%s)" -ge "$deadline" ] && { echo "No ssh process appeared within ${wait_secs}s."; exit 1; }
+  sleep 0.5
+done
+
+for pid in $pids; do
+  args=$(ps -o args= -p "$pid" 2>/dev/null || echo "(exited)")
+  host=$(printf '%s\n' "$args" | awk '{for (i = 2; i <= NF; i++) if ($i !~ /^-/ && $(i-1) !~ /^-[oiFpJlEcmbDLRW]$/) {print $i; exit}}')
+  cwd=$(lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p')
+  echo "== ssh $pid, started $(ps -o lstart= -p "$pid" 2>/dev/null)"
+  echo "   connects to: ${host:-unknown}"
+  echo "   folder:      ${cwd/#$HOME/~}"
+  echo "   started by:"
+  app="" q=$pid
+  while [ -n "$q" ] && [ "$q" -gt 1 ]; do
+    cmd=$(ps -o args= -p "$q" 2>/dev/null) || break
+    printf '     %-7s %s\n' "$q" "$(printf '%s' "$cmd" | cut -c1-120)"
+    case $cmd in */Applications/*.app/*) app=$(printf '%s' "$cmd" | sed -E 's#.*/Applications/([^/]+)\.app/.*#\1#') ;; esac
+    q=$(ps -o ppid= -p "$q" 2>/dev/null | tr -d ' ')
+  done
+  echo "   app:         ${app:-none found (a shell or a background job)}"
+done

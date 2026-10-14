@@ -212,6 +212,22 @@ rm -rf "$T"
 
 Never copy the key back to `~/.ssh`.
 
+## When a prompt appears that you did not expect
+
+The prompt names only the program, usually `ssh`. To see what started it,
+install [`files/ssh-who`](files/ssh-who) once:
+
+```bash
+mkdir -p ~/.local/bin && install -m 755 files/ssh-who ~/.local/bin/ssh-who
+```
+
+Then run `ssh-who` in your own terminal while the prompt is open. It waits
+up to a minute for an `ssh` to appear. For each one it shows the host, the
+folder it runs in, the chain of processes that started it, and the app at
+the top of that chain. Common sources are an editor's background fetch, a
+git app, or a terminal waiting on `git fetch`. Agent shells cannot reach the
+agent socket; if the chain shows `claude`, deny the prompt.
+
 ## Checks
 
 In your own terminal:

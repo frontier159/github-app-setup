@@ -266,7 +266,7 @@ counterpart.
   else of yours.
 - [Elevated `gh` access](elevated-gh-access.md) is optional: `gh-admin`
   runs one admin command with a token kept in Bitwarden.
-- [`files/`](files/) holds the `gh` shim, the credential helper,
+- [`files/`](files/) holds the `gh` shim, the credential helper, `ssh-who`,
   `gh-admin`, and the Claude Code settings fragment for
   [step 04](04-claude-code-sandbox.md#settings).
 - Commands work in zsh and bash. No `sudo`.
