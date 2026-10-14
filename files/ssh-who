@@ -40,4 +40,12 @@ for pid in $pids; do
     q=$(ps -o ppid= -p "$q" 2>/dev/null | tr -d ' ')
   done
   echo "   app:         ${app:-none found (a shell or a background job)}"
+  if [ "$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')" = 1 ]; then
+    echo "   note:        its parent has exited, so nothing is waiting on the answer. Deny it."
+    echo "                Run ssh-who --wait 600 before the next prompt to catch the parent alive."
+  fi
+  case $args in *BatchMode=yes*)
+    echo "   note:        BatchMode=yes: started by automation (an app, prompt plugin or"
+    echo "                background job) that must never ask for a password, not by you typing." ;;
+  esac
 done
