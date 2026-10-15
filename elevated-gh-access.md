@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Required | optional |
-| Depends on | [restricting your own `gh` login](01-github.md#optional-restrict-your-own-gh-login) |
+| Depends on | [restricting your own `gh` login](01-github.md#restrict-your-own-gh-login), and [step 04](04-claude-code-sandbox.md) with its checks passing, in Desktop too |
 | If you skip it: security | Nothing changes. Admin work stays in the browser. |
 | If you skip it: operations | Admin commands such as `gh repo create` don't work from your terminal. |
 | If you skip it: change elsewhere | nothing |
@@ -22,6 +22,14 @@ Plain `gh` stays on your restricted login. The pattern is the same as
 `aws-vault exec`: the strong credential is locked away and comes out
 for one command.
 
+Set up step 04 first. Without it, the agent can replace `gh-admin` or
+`bw`, or add a `gh-admin` function to a startup file, and catch your
+master password the next time you type it. Step 04's sandbox confines
+the agent's Bash writes. Its `Edit(...)` deny rules cover the file
+tools, which run outside the sandbox. Desktop has a report of ignoring
+some Edit and Write deny rules (anthropics/claude-code#98443), so run
+step 04's [edit check](04-claude-code-sandbox.md#checks) in Desktop.
+
 ## How it works
 
 [`files/gh-admin`](files/gh-admin) is a short bash script. For each
@@ -36,9 +44,12 @@ call it:
 5. locks the vault and deletes the config directory, whether `gh`
    succeeded or not.
 
-The master password and the session key reach `bw` through the
-environment, never on its command line, so they don't show in the
-process list. The token exists only in the `gh` process's environment.
+The master password reaches `bw` through a file descriptor, never the
+environment or the command line. The session key reaches `bw get`, and
+the token reaches `gh`, through the environment. Any process running as
+you can read a process's environment with `ps -E` while that command
+runs. Keep `gh-admin` commands short. The token lives only in the
+wrapper's memory and `gh`'s environment, never on disk or in argv.
 
 ## Set up
 
@@ -61,11 +72,13 @@ process list. The token exists only in the `gh` process's environment.
    [docs](https://bitwarden.com/help/cli/) list other ways to install it. It keeps
    an encrypted copy of your vault and needs your master password to
    read it.
-4. **Install the wrapper** somewhere on your `PATH`:
+4. **Install the wrapper**:
 
    ```bash
-   install -m 755 files/gh-admin ~/.local/bin/gh-admin
+   mkdir -p ~/.local/bin && install -m 755 files/gh-admin ~/.local/bin/gh-admin
    ```
+
+   If `~/.local/bin` is not on your `PATH`, add it in `~/.zshenv`.
 
 5. **Check it:**
 
@@ -74,7 +87,7 @@ process list. The token exists only in the `gh` process's environment.
    ```
 
    It prompts for your master password and shows the elevated token's
-   account. After it returns, `bw status` reports `locked`.
+   account.
 
 If you add or change the `gh-admin` item in another Bitwarden app, run
 `bw sync` once so the CLI sees it.
@@ -91,9 +104,17 @@ If you add or change the `gh-admin` item in another Bitwarden app, run
   password for anything running as you.
 - **The agent check is a speed bump.** The script refuses when
   `CLAUDECODE` is set, but an agent could unset it. The master
-  password is the real control. The settings fragment in
-  [step 04](04-claude-code-sandbox.md#settings) also denies `gh-admin`
-  and `bw` to the agent, and stops it reading the CLI's vault copy.
+  password is the real control. The sandbox confines the agent's Bash
+  writes. The `Edit(...)` deny rules cover its file tools, for the
+  files they name only, with the Desktop caveat above. The settings
+  fragment in [step 04](04-claude-code-sandbox.md#settings) also denies
+  `gh-admin` and `bw` to the agent, and stops it reading the Bitwarden
+  vault copies it names.
+- **Code the agent wrote runs as you** when you run it outside an
+  agent session: `npm test`, `make`, a git hook in a fresh clone, an
+  `.envrc`. It runs unsandboxed, so it could catch your master
+  password. Run builds and tests from the agent session, or read the
+  diff, before you next type your master password.
 
 ## Limits
 

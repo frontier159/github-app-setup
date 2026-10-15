@@ -16,18 +16,19 @@ die() { echo "gh-admin: $*" >&2; exit 1; }
 command -v bw >/dev/null || die "Bitwarden CLI not found: brew install bitwarden-cli, then bw login"
 command -v gh >/dev/null || die "gh not found on PATH"
 
-cfg=$(mktemp -d)
+cfg=$(mktemp -d "${TMPDIR:-/tmp}/gh-admin.XXXXXX")
 cleanup() { stty echo </dev/tty 2>/dev/null || true; bw lock >/dev/null 2>&1 || true; rm -rf "$cfg"; }
 trap cleanup EXIT
 
 # Echo goes off before the prompt appears, so nothing typed early is shown.
 stty -echo </dev/tty
 printf 'Bitwarden master password: ' >&2
-read -r password </dev/tty
+IFS= read -r password </dev/tty
 stty echo </dev/tty
 echo >&2
-# The password and session key travel in the environment, never in argv.
-session=$(BW_PASSWORD=$password bw unlock --passwordenv BW_PASSWORD --raw) || die "vault not unlocked"
+# The password reaches bw through a file descriptor: never argv, never the environment,
+# which same-user processes can read with ps -E. printf is a builtin, so no argv either.
+session=$(bw unlock --passwordfile <(printf '%s' "$password") --raw) || die "vault not unlocked"
 unset password
 token=$(BW_SESSION=$session bw get password "$ITEM") \
   || die "no single vault item named $ITEM; create it, or run bw sync"

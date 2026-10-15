@@ -1,0 +1,3 @@
+#!/bin/sh
+# Runs git with the agent's config: HTTPS with the per-owner tokens, never SSH.
+GIT_CONFIG_GLOBAL="$HOME/.config/agent-git/gitconfig" GIT_TERMINAL_PROMPT=0 exec git "$@"

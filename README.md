@@ -1,50 +1,83 @@
 # Agent GitHub access
 
-Give a local coding agent its own least-privilege GitHub identity. Your
-own git and `gh` keep working as before. Claude Code (CLI and Desktop)
-on macOS is the worked example.
+Let a local coding agent work on GitHub with a token that cannot
+administer anything, while your own git and `gh` keep working as
+before. Claude Code (CLI and Desktop) on macOS is the worked example.
 
 ## Getting started
 
 You need:
 
 - macOS, with zsh as your login shell. bash is supported by the
-  installer but not yet confirmed to route; see [step 02](02-agent-identity.md#why-two-startup-files).
+  installer but not yet confirmed to route; see [step 02](02-agent-routing.md#why-two-startup-files).
 - git 2.32 or newer, and the `gh` CLI on your `PATH`.
-- `jq`, which ships with macOS 15 and later.
+- `jq` for `check-github.sh` and step 01's MCP check; it ships with
+  macOS 15 and later.
 - A password manager with an SSH agent, for [step 03](03-ssh-key-to-password-manager.md).
-- Owner rights on each GitHub org you want the agent in, or an owner
-  who will approve the App.
+- For each GitHub org you want the agent in: permission to create a
+  fine-grained token for it. Some orgs require an owner to approve
+  those tokens.
 
 Then:
 
-1. Clone this repo, check out the latest release tag, and `cd` into it.
-   The installer runs from the repo root. Read `install.sh` before you
-   run it: it edits your shell startup files.
-2. Do [step 01](01-github.md) in the browser. You end with an App ID
-   and the App's private key at `~/.config/agent-git/app.pem`. Check it
-   with `./check-github.sh --app-id <APP_ID> --repo <owner/repo>`.
-3. Run the installer, as [step 02](02-agent-identity.md#run-the-installer)
-   describes:
+1. Clone this repo and check out the latest release tag, v0.2.0 or
+   later. Read `install.sh` before you run it: it edits your shell
+   startup files.
+2. Do [step 01](01-github.md) in the browser: restrict your own `gh`
+   login and add rulesets on the repos that matter.
+3. Run the installer, as [step 02](02-agent-routing.md#run-the-installer)
+   describes, with one `--owner` for each owner. At each "Paste the
+   agent's PAT for OWNER" prompt, create that owner's token by
+   [the recipe](01-github.md#the-token-recipe) and paste it straight
+   in. Never save a token yourself; the installer stores it.
 
-   ```bash
-   ./install.sh --app-id <APP_ID> --default-owner <OWNER>
+   ```zsh
+   ./install.sh --owner OWNER --default-owner OWNER
    ```
 
 4. Run step 02's checks in an agent session, then do
    [step 03](03-ssh-key-to-password-manager.md) and
-   [step 04](04-claude-code-sandbox.md).
-5. Run `./install.sh --check` at any time to see where you stand.
+   [step 04](04-claude-code-sandbox.md). Read [step 05](05-living-with-the-sandbox.md)
+   when the sandbox gets in the way.
+5. Run `./install.sh --check` at any time to see where you stand, and
+   `./check-github.sh --repo OWNER/REPO` to check a repo's rules.
 
 The rest of this page explains the model and why it is built this way.
+
+## Upgrading from v0.1.0 (GitHub App)
+
+v0.1.0 gave the agent a GitHub App. This version uses your own
+restricted PATs instead. To move over:
+
+1. Do [step 01](01-github.md), then rerun the installer with the full
+   command from [step 02](02-agent-routing.md#run-the-installer):
+   `--owner` for each owner, and `--default-owner`. It replaces the old
+   source line.
+2. Delete the App's key and helper, if present:
+
+   ```zsh
+   rm -f ~/.config/agent-git/app.pem ~/.config/agent-git/bin/git-credential-github-app ~/go/bin/git-credential-github-app
+   ```
+
+3. Uninstall the App from each org and account, then delete it.
+4. Once its open PRs are merged, unassign its CodeRabbit seat.
+5. If you finished step 03 under v0.1.0, run its new macOS agent
+   check in [Remove the file](03-ssh-key-to-password-manager.md#remove-the-file).
+6. bash users: if v0.1.0 created a `~/.bash_profile` that holds only
+   the source line, add this line at its top, or `~/.profile` stops
+   loading:
+
+   ```bash
+   [ -r "$HOME/.profile" ] && . "$HOME/.profile"
+   ```
 
 ## The problem
 
 One macOS user, two actors. The agent runs as that user, so by default
 it can use every credential the human has: the `~/.ssh/id_rsa` file for
-git over SSH, and the `gh` login for the GitHub API. GitHub cannot tell
-the two actors apart. Branch protection, audit logs and PR approval
-rules all treat the agent as the human.
+git over SSH, and the `gh` login for the GitHub API. A browser `gh`
+login can create and delete repos, change settings and manage secrets.
+Anything that login can do, the agent can do.
 
 ```mermaid
 flowchart LR
@@ -61,102 +94,92 @@ flowchart LR
   C1 --> GH
   C2 --> KEY
   C2 --> GH
-  KEY -- "SSH as alice" --> GITHUB["GitHub"]
-  GH -- "API as alice" --> GITHUB
+  KEY -- "SSH, full access" --> GITHUB["GitHub"]
+  GH -- "API, can administer" --> GITHUB
   style KEY fill:#fdd,stroke:#c00
   style GH fill:#fdd,stroke:#c00
 ```
 
-Goal: the agent keeps normal engineering capability. It can clone,
-fetch, push feature branches, open and update PRs, and read CI. It
-cannot administer repositories, change rulesets, manage secrets or
-collaborators, or act as the human. The human's workflow stays as it is.
-
-The security principle: **GitHub itself must not grant the agent's
-identity the dangerous operations.** Local policy that tells the agent
-not to misuse a powerful credential is defence in depth, not the
-boundary.
+Goal: the agent keeps nearly all normal engineering capability, such as
+cloning, pushing branches, opening and reviewing PRs, and reading CI.
+It cannot create or delete repos, change settings or rulesets, or manage
+secrets and collaborators. **GitHub itself refuses those calls,**
+because no credential the agent can reach is allowed to make them.
 
 ## The model
 
 ```mermaid
 flowchart TB
-  subgraph human["Human (alice)"]
+  subgraph human["You"]
     HT["Terminal"]
     BW[("Bitwarden SSH agent<br/>key in vault, prompt per use")]
-    PAT[("Your gh login<br/>in the keychain")]
-    WEB["Browser + passkey"]
+    PAT[("Your gh login<br/>restricted PAT")]
+    ADM["gh-admin<br/>strong token in Bitwarden"]
   end
-  subgraph agent["Agent (Claude Code CLI and Desktop)"]
-    CS["zsh with CLAUDECODE=1<br/>GIT_CONFIG_GLOBAL, GH_CONFIG_DIR<br/>no SSH_AUTH_SOCK"]
-    HELPER["credential helper<br/>mints 1 h token from app.pem"]
-    SBX["Seatbelt sandbox<br/>~/.ssh unreadable<br/>agent sockets blocked"]
+  subgraph agent["Agent shells (CLI and Desktop)"]
+    ENV["CLAUDECODE=1 loads env.sh<br/>agent gitconfig, gh shim<br/>no SSH agent socket"]
+    TOK[("one restricted PAT<br/>per owner")]
   end
   subgraph github["GitHub"]
-    APP["alice-agent App<br/>Contents, PRs, Issues RW<br/>Actions R, no admin"]
-    RULES["Rulesets<br/>stage/main: PR + checks<br/>no force push, no delete"]
-    REPOS[("Repositories<br/>ExampleOrg, alice, ...")]
+    RULES["Rulesets<br/>PR + review, no force push,<br/>no tag creation"]
+    REPOS[("Repositories")]
   end
   HT --> BW -- "git over SSH" --> RULES
-  HT --> PAT -- "gh, ordinary ops" --> RULES
-  WEB -- "admin, rare" --> REPOS
-  CS --> HELPER -- "git over HTTPS<br/>gh via GH_TOKEN" --> APP --> RULES
-  SBX -.->|"blocks"| BW
+  HT --> PAT -- "gh" --> RULES
+  ADM -- "admin, one command" --> REPOS
+  ENV --> TOK -- "git over HTTPS<br/>gh via GH_TOKEN" --> RULES
   RULES --> REPOS
 ```
 
-Two identities, two credential stores, one set of server-side rules.
-
-| | Human | Agent |
+| | You | The agent |
 |---|---|---|
-| GitHub identity | `alice` | `alice-agent` App (`alice-agent[bot]`) |
-| git transport | SSH, key served by Bitwarden | HTTPS, token from the App |
-| `gh` | your own login in the keychain, optionally a restricted PAT | App installation token |
-| Admin operations | browser with passkey | none, the App lacks the permissions |
-| Can reach the other's credential | n/a | no: key not on disk, `~/.ssh` and agent sockets denied |
+| GitHub identity | you | you |
+| git | SSH, key served by your password manager | HTTPS with the owner's restricted PAT |
+| `gh` | your own login, a restricted PAT | the owner's restricted PAT |
+| Admin | browser, or [`gh-admin`](elevated-gh-access.md) | none: no token it can reach allows it |
+| Your SSH key | yes, with a prompt per use | no: no key file, no agent socket |
 
 ## Why this model
 
 ### Security
 
-- **Server-enforced least privilege.** The App has no Administration,
-  Secrets, Webhooks, Workflows or Environments permission. An admin call
-  from the agent fails with 403 at GitHub, whatever the local setup.
-  Repo creation fails with 403.
-- **Distinct identity, per operator.** Pushes and PRs are recorded as
-  `alice-agent[bot]`. Each org member who runs an agent registers
-  `<handle>-agent`, so the org can tell whose agent did what. Rulesets
-  can treat the App differently from you. The audit log separates the
-  two. You can approve the agent's PRs because you are not their author.
-- **Commits stay yours.** git takes authorship from `user.email`, not
-  from the transport. The agent's commits keep your name and your GPG
-  signature.
-- **Nothing to fall back to.** The human key leaves the filesystem for
-  the password manager's vault. The sandbox denies reads of `~/.ssh` and
-  blocks agent sockets. The only GitHub credential the agent can reach
-  is `app.pem`, which grants exactly the App's permissions.
-- **Short-lived tokens.** Tokens last one hour. The helper mints a
-  fresh one for every call, so nobody renews anything.
-- **Protected refs regardless of identity.** Rulesets on `stage`,
-  `main` and release tags hold even if a future mistake lets the agent
-  act as you.
+- **GitHub enforces the limit.** Every token the agent can reach is a
+  fine-grained PAT with Administration, Workflows and Secrets set to No
+  access. An admin call fails with 403 whatever happens on your machine.
+- **Nothing stronger is lying around.** Your own `gh` login is
+  restricted too, step 01 has you remove other GitHub credentials, and
+  your SSH key lives in your password manager instead of a file. If the agent steps around its routing, it finds
+  nothing more powerful.
+- **Admin work needs you.** The strong token sits in Bitwarden behind
+  your master password and comes out for one command at a time.
+- **Protected refs regardless.** Rulesets on default branches and
+  release tags hold whatever credential pushes.
 
 ### Operational
 
-- **Human workflow unchanged.** Same remotes, same SSH key through the
-  password manager, one `SSH_AUTH_SOCK` line. Your own `gh` login stays as it is,
-  unless you choose to restrict it. Bitwarden prompts once per signature.
-- **Agent workflow unchanged.** `git fetch`, `git push origin
-  feature`, `gh pr create` and `gh run view` all work as before. The
-  transport changes underneath.
-- **One mechanism for CLI and Desktop.** Both run zsh with
-  `CLAUDECODE=1`. Both read `~/.claude/settings.json`. No launcher, no
-  wrapper, no Desktop special case.
-- **Multi-org by construction.** One App registration, one installation
-  per owner with its own repository selection, one config section per
-  owner. Adding an org takes ten minutes.
+- **One identity.** The agent works as you, so CodeRabbit and similar
+  tools bill one seat, nothing needs installing per org, and the agent's
+  PRs are yours: GitHub will not let you approve them yourself.
+- **Your workflow barely changes.** Same remotes. Your `gh` login
+  becomes a restricted PAT for one owner. Your SSH key moves to your
+  password manager, which prompts for each use.
+- **The agent's workflow is unchanged.** `git push`, `gh pr create`,
+  `gh pr view` and PR comments all work.
+- **One mechanism for CLI and Desktop,** and one token per owner.
 
-## How an agent git push works after setup
+### What it accepts
+
+- **The agent's actions look like yours.** Pushes, PRs, comments and
+  reviews all show your name. Teammates cannot tell what your agent did.
+- **Its approvals would count as yours.** The `gh` shim refuses to
+  approve PRs, but that is a local speed bump. An agent that bypassed it
+  could approve a teammate's PR as you.
+- **Tokens are long-lived and readable by the agent.** Each PAT lasts up
+  to a year and sits in a file the agent must read to use it. A leaked
+  token reaches one owner's selected repos, without admin, until you
+  revoke it or it expires.
+
+## How an agent push works
 
 ```mermaid
 sequenceDiagram
@@ -166,46 +189,41 @@ sequenceDiagram
   participant GH as GitHub
   A->>G: git push origin feature
   Note over G: CLAUDECODE=1 loaded env.sh<br/>GIT_CONFIG_GLOBAL = agent gitconfig
-  G->>G: insteadOf: git@github.com: -> https://github.com/
-  G->>H: credential fill for github.com/ExampleOrg
-  H->>GH: JWT signed with app.pem
-  GH-->>H: installation token, 1 h, ExampleOrg installation
-  H-->>G: ghs_...
-  G->>GH: HTTPS push as alice-agent[bot]
+  G->>G: insteadOf: git@github.com: becomes https://github.com/
+  G->>H: credential fill for github.com/ExampleOrg/repo
+  H-->>G: the PAT stored for ExampleOrg
+  G->>GH: HTTPS push, as you
   GH->>GH: rulesets: feature branch allowed
   GH-->>G: ok
 ```
 
-`gh` follows the same path. A shim asks git's credential chain for a
-token for the current repo's owner and exports it as `GH_TOKEN`. One
-token source.
+`gh` follows the same path: a shim asks git's credential chain for the
+current repo owner's token and exports it as `GH_TOKEN`.
 
 ## The steps
 
-| # | Step | What it does | Why it is needed | Required | Time |
-|---|---|---|---|---|---|
-| 01 | [01-github.md](01-github.md) | Registers `alice-agent`, installs it on each owner, adds rulesets. Optionally restricts your own `gh` login | Creates the agent's identity and protects the refs that matter | yes (rulesets recommended) | 30 min + 10 min per repo |
-| 02 | [02-agent-identity.md](02-agent-identity.md) | Runs [`install.sh`](install.sh): preflight, a plan you confirm, then the agent gitconfig, env file and `gh` shim, verified per owner | Makes the App the default path for the agent on both surfaces | yes | 10 min |
-| 03 | [03-ssh-key-to-password-manager.md](03-ssh-key-to-password-manager.md) | Backs up `~/.ssh`, imports the key into Bitwarden, enables its SSH agent, deletes the key file | Removes the credential the agent could fall back to | recommended | 30 min + migration |
-| 04 | [04-claude-code-sandbox.md](04-claude-code-sandbox.md) | `sandbox.enabled`, `denyRead` on `~/.ssh`, deny rules in `~/.claude/settings.json` | OS-level enforcement: the agent's processes cannot read `~/.ssh` or open agent sockets | recommended | 10 min |
+| # | Step | What it does | Required | Time |
+|---|---|---|---|---|
+| 01 | [01-github.md](01-github.md) | Restricts your own `gh` login, creates the agent's PAT per owner, adds rulesets | yes | 20 min + 10 min per repo |
+| 02 | [02-agent-routing.md](02-agent-routing.md) | Runs [`install.sh`](install.sh): stores the tokens, writes the agent gitconfig, env file and `gh` shim, verifies each token | yes | 10 min |
+| 03 | [03-ssh-key-to-password-manager.md](03-ssh-key-to-password-manager.md) | Imports your SSH key into Bitwarden, enables its SSH agent, deletes the key file | recommended | 30 min |
+| 04 | [04-claude-code-sandbox.md](04-claude-code-sandbox.md) | Turns on Claude Code's sandbox with reads of `~/.ssh` and agent sockets denied | recommended | 10 min |
+| 05 | [05-living-with-the-sandbox.md](05-living-with-the-sandbox.md) | Fixes for common sandbox blocks, and a loop that logs them for review | recommended | 15 min reading |
 
-Order matters. Finish and check [01](01-github.md) and [02](02-agent-identity.md) before [03](03-ssh-key-to-password-manager.md) and [04](04-claude-code-sandbox.md), so the
-agent has working HTTPS access before the SSH key moves. Each step ends
-with its own checks.
-
-Roll back in reverse step order. Each step ends with its rollback.
+Finish and check [01](01-github.md) and [02](02-agent-routing.md)
+before [03](03-ssh-key-to-password-manager.md) and
+[04](04-claude-code-sandbox.md), so the agent has working HTTPS access
+before the SSH key moves. Each step ends with its own checks and its
+rollback. Roll back in reverse step order.
 
 ## Other agents (Codex CLI and Desktop, others)
 
-Not done here. These are notes for whoever extends this. The design
-splits into an agent-agnostic half and an agent-specific half.
+Not done here. These are notes for whoever extends this.
 
-Agent-agnostic, reusable as is: the GitHub App, installations and
-rulesets (01); the gitconfig, credential helper, HTTPS rewrite and `gh`
-shim (02); the password-manager SSH agent (03). None of these know which
-agent runs. They only need the agent's shell to load the env file:
-`GIT_CONFIG_GLOBAL`, `GH_CONFIG_DIR`, the `PATH` prefix and no
-`SSH_AUTH_SOCK`.
+Agent-agnostic, reusable as is: the tokens and rulesets (01), the
+gitconfig, credential helper, HTTPS rewrite and `gh` shim (02), and the
+password-manager SSH agent (03). They only need the agent's shell to
+load the env file.
 
 Agent-specific, needs investigation per agent:
 
@@ -214,10 +232,10 @@ Agent-specific, needs investigation per agent:
 | How the shell knows it is an agent shell | `CLAUDECODE=1` set by CLI and Desktop; the source lines test it | Which env var, if any, the other agent sets, and whether its shell reads `~/.zshenv` and `~/.zprofile`. If none, add a second marker to the source lines, or launch the agent through a wrapper that sets one |
 | OS-level file read denial | `sandbox.filesystem.denyRead` in `~/.claude/settings.json`, Seatbelt | Codex CLI has its own Seatbelt sandbox (`~/.codex/config.toml`, `sandbox_mode`). Check whether it can deny reads of `~/.ssh`, not only confine writes, and whether the desktop app honours it |
 | Tool-level read denial | `permissions.deny` `Read(~/.ssh/**)` | The equivalent in the other agent's config, if one exists |
-| Network allowlist and unix sockets | `sandbox.network` | Codex defaults to network off inside its sandbox. Check how that interacts with the credential helper reaching `api.github.com` |
+| Network allowlist and unix sockets | `sandbox.network` | Codex defaults to network off inside its sandbox. Check that git and `gh` can still reach `github.com` |
 
 Rule of thumb: keep steps [01](01-github.md) to [03](03-ssh-key-to-password-manager.md) shared across agents. Give each agent
-its own version of [step 04](04-claude-code-sandbox.md) and its own marker in the [source line](02-agent-identity.md#why-two-startup-files).
+its own version of [step 04](04-claude-code-sandbox.md) and its own marker in the [source line](02-agent-routing.md#why-two-startup-files).
 
 ## On Linux
 
@@ -227,29 +245,34 @@ counterpart.
 | Concern | macOS (this guide) | Linux |
 |---|---|---|
 | Agent surfaces | Claude Code CLI and Desktop | CLI only; Claude Desktop does not ship for Linux |
-| Installer and shell | `install.sh` supports zsh and bash login shells | The installer and the `gh` shim are bash 3.2 and the env file is POSIX, so both shells work. The installer refuses Linux for now: it reads file modes with macOS `stat -f` |
+| Installer and shell | `install.sh` supports zsh and bash login shells | The installer and the `gh` shim are bash 3.2 and the env file is POSIX, so both shells work. The installer refuses Linux for now: it uses macOS-only tools (`stat -f`, `date -j`, `plutil`) |
 | Sandbox | Seatbelt, built in | bubblewrap + socat; install them first. Same settings keys |
 | Password-manager agent | Bitwarden or 1Password sockets as in [03](03-ssh-key-to-password-manager.md) | Socket paths differ by package (deb, snap, flatpak); check the vendor docs. 1Password: `~/.1password/agent.sock`. No Secretive; gnome-keyring or KeePassXC agents also work |
-| Break-glass backup | `hdiutil` encrypted image | LUKS image, or `tar -C ~ -c .ssh \| gpg -c > breakglass-ssh.tar.gpg` |
+| Key backup | the Bitwarden vault item, plus an optional encrypted vault export | same |
 | Clipboard | `pbcopy` | `wl-copy` or `xclip` |
 | Keychain | login keychain via `security` | Secret Service (libsecret); the `helper =` reset already clears it for git |
 | Home | `/Users/alice` | `/home/alice` |
 | Stronger isolation | a separate macOS user is awkward | a separate Linux user or rootless container is cheap |
-
-Steps [01](01-github.md) and [02](02-agent-identity.md) apart from the shell lines are unchanged.
 
 ## Paths
 
 - `OWNER` means a GitHub org or user that owns repos (`ExampleOrg`,
   `alice`).
 - Agent-only files live under `~/.config/agent-git/` and
-  `~/.config/agent-gh/`. [Step 01](01-github.md#private-key) puts the
-  App private key at `~/.config/agent-git/app.pem`. The installer
-  writes the rest; [step 02](02-agent-identity.md#what-it-writes) lists
-  each file. Outside those directories it adds one source line to two
-  startup files and touches nothing else of yours.
+  `~/.config/agent-gh/`, including one token file per owner. The
+  installer writes them; [step 02](02-agent-routing.md#what-it-writes)
+  lists each one. Outside those directories it adds one source line to
+  two startup files, with a first backup of each, kept across reruns.
+  For bash users with only `~/.profile`, it also adds a line that
+  sources `~/.profile` to the new `~/.bash_profile`. It touches nothing
+  else of yours.
 - [Elevated `gh` access](elevated-gh-access.md) is optional: `gh-admin`
   runs one admin command with a token kept in Bitwarden.
-- [`files/`](files/) holds the `gh` shim, `gh-admin`, and the Claude Code settings
-  fragment for [step 04](04-claude-code-sandbox.md#settings).
+- [`files/`](files/) holds the `gh` shim, the credential helper, `ssh-who`,
+  `gh-admin`, and the Claude Code settings fragment for
+  [step 04](04-claude-code-sandbox.md#settings). It also holds `git-pat`,
+  a git wrapper for editors from
+  [step 03](03-ssh-key-to-password-manager.md#when-a-prompt-appears-that-you-did-not-expect),
+  and, for [step 05](05-living-with-the-sandbox.md#the-friction-loop),
+  `claude-md-agent-rules.md` and `skills/sandbox-triage`.
 - Commands work in zsh and bash. No `sudo`.
