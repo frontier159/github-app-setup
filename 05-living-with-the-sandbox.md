@@ -188,6 +188,51 @@ output before pointing the browser tools at it.
   installer if your env file predates it.
 - **Cost:** none.
 
+### Node `fetch` cannot resolve hosts
+
+- **Symptom:** `fetch` in Node fails with `ENOTFOUND`, though `curl`
+  to the same allowed host works.
+- **Cause:** the sandbox allows network only through its proxy, and
+  Node's built-in `fetch` ignores `HTTPS_PROXY` by default.
+- **Fix:** step 02's env file sets `NODE_USE_ENV_PROXY=1` (Node 24 or
+  later). The host still needs to be in `allowedDomains`.
+- **Cost:** none.
+
+### Rust and Foundry tools fail TLS or panic on start
+
+- **Symptom:** `anvil --fork-url`, `cast` or a Rust HTTP client fails
+  with `invalid peer certificate ... OSStatus -26276`, or a reqwest
+  client panics in `SCDynamicStoreCreate`.
+- **Cause:** these tools verify certificates through macOS's
+  certificate service (`com.apple.trustd.agent`), and reqwest reads
+  the system proxy settings from `com.apple.SystemConfiguration.configd`.
+  The sandbox blocks both. `SSL_CERT_FILE` and `NO_PROXY` do not
+  change either.
+- **Fix:** allow the two services:
+
+  ```bash
+  cp ~/.claude/settings.json ~/.claude/settings.json.bak && jq '.sandbox.network.allowMachLookup = ((.sandbox.network.allowMachLookup // []) + ["com.apple.trustd.agent", "com.apple.SystemConfiguration.configd"] | unique)' ~/.claude/settings.json.bak > ~/.claude/settings.json
+  ```
+- **Cost:** `configd` only reads network settings. `trustd` fetches
+  certificate revocation and intermediate URLs itself, outside the
+  proxy, which is a narrow way around `allowedDomains`. Allow it only
+  if you need these tools in agent shells.
+
+### `tsx` cannot listen on its pipe
+
+- **Symptom:** the `tsx` command fails with
+  `listen EPERM ... /tmp/claude-<uid>/tsx-<uid>/<pid>.pipe`.
+- **Cause:** the `tsx` command always opens a Unix socket for its
+  child process, and the sandbox refuses to bind Unix sockets outside
+  `allowUnixSockets`. Writable `TMPDIR` does not help.
+- **Fix:** run `node --import tsx file.ts`, which needs no socket. Or
+  allow the folder, using your own uid (`id -u`):
+
+  ```bash
+  cp ~/.claude/settings.json ~/.claude/settings.json.bak && jq --arg d "/private/tmp/claude-$(id -u)/tsx-$(id -u)" '.sandbox.network.allowUnixSockets = ((.sandbox.network.allowUnixSockets // []) + [$d] | unique)' ~/.claude/settings.json.bak > ~/.claude/settings.json
+  ```
+- **Cost:** low. Only tsx uses that folder.
+
 ### Verifying commit signatures
 
 - **Symptom:** signing works; `git log --show-signature` or

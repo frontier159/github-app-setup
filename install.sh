@@ -232,6 +232,10 @@ export SSL_CERT_FILE=/etc/ssl/cert.pem
 export npm_config_cache="\${TMPDIR:-/tmp}/npm-cache"
 # Dev servers that open a browser on start fail at it inside the sandbox.
 export BROWSER=none
+# Node's fetch ignores HTTPS_PROXY unless told; the sandbox allows no direct connections.
+export NODE_USE_ENV_PROXY=1
+# gh posts usage telemetry to a host the sandbox does not allow.
+export GH_TELEMETRY=false
 # Claude Code resets PATH from its shell snapshot after startup files run;
 # a function survives that, so plain gh still reaches the shim.
 gh() { "\$HOME/.config/agent-gh/bin/gh" "\$@"; }
